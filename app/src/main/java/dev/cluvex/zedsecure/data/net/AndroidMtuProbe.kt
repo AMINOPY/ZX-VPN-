@@ -3,8 +3,6 @@ package dev.cluvex.zedsecure.data.net
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
-import dev.cluvex.zedsecure.data.net.MtuProbe
-import dev.cluvex.zedsecure.data.net.MtuVerdict
 
 object AndroidMtuProbe {
     fun install(context: Context) {
@@ -45,7 +43,8 @@ object AndroidMtuProbe {
 
         val output = runCatching {
             val text = process.inputStream.bufferedReader().use { it.readText() }
-
+            // The ping process has its own -W timeout, so the API-24-compatible
+            // wait does not rely on the API-26 timed Process.waitFor overload.
             process.waitFor()
             text
         }.getOrElse {
