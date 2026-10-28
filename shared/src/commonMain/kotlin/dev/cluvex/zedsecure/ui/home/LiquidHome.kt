@@ -438,7 +438,7 @@ private fun LiquidQuickHubOverlay(
                     }
                 }
                 Text(
-                    "۱۵ ثانیه نگه داشتی؛ میان‌برهای مخفی باز شدند",
+                    "۵ ثانیه نگه داشتی؛ میان‌برهای مخفی باز شدند",
                     modifier = Modifier.align(Alignment.Center).offset(y = maxHeight * 0.285f).padding(horizontal = 28.dp),
                     color = Color.White.copy(alpha = 0.86f),
                     style = MaterialTheme.typography.bodyMedium,
