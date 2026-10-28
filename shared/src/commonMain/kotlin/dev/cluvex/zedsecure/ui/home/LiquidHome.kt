@@ -504,7 +504,7 @@ private fun LiquidQuickHubOverlay(
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Text(
-                            "این صفحه به‌صورت اختصاصی برای Liquid Theme ساخته شده است. مرحلهٔ بعد، اتصال ابزار واقعی همین بخش خواهد بود.",
+                            "اطلاعات این بخش از وضعیت فعلی برنامه نمایش داده می‌شود؛ نتیجهٔ بررسی به شبکه و زمان وابسته است و تضمین ناشناس‌ماندن نیست.",
                             Modifier.padding(16.dp),
                             color = cs.onSurfaceVariant,
                             style = MaterialTheme.typography.bodyMedium,
