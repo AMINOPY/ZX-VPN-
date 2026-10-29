@@ -38,6 +38,11 @@ class AiToolsPermissionTest {
     }
 
     @Test
+    fun mtuProbeIsReadOnlyOnlyWhenItDoesNotReconnectOrApply() {
+        assertFalse(AiTools.isBlockedByReadOnly("probe_mtu", allowChanges = false))
+    }
+
+    @Test
     fun mutatingToolsAreAvailableOnlyWhenUserEnabledChanges() {
         assertFalse(AiTools.isBlockedByReadOnly("connect", allowChanges = true))
         assertFalse(AiTools.isBlockedByReadOnly("apply_settings", allowChanges = true))
