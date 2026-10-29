@@ -195,13 +195,16 @@ object AiTools {
         "import_config", "delete_server", "create_server",
     )
 
+    fun isBlockedByReadOnly(toolName: String, allowChanges: Boolean): Boolean =
+        !allowChanges && toolName in changingToolNames
+
     suspend fun run(
         call: AiToolCall,
         bridge: AiAppBridge,
         allowChanges: Boolean = false,
     ): AiToolResult {
         // Enforce read-only mode at the execution boundary, not only by hiding tool schemas.
-        if (!allowChanges && call.name in changingToolNames) {
+        if (isBlockedByReadOnly(call.name, allowChanges)) {
             return AiToolResult(
                 call.id,
                 call.name,
