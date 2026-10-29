@@ -13,6 +13,7 @@ class AiToolsPermissionTest {
             "connect",
             "disconnect",
             "import_config",
+            "add_tested_configs",
             "delete_server",
             "create_server",
         )
@@ -31,6 +32,7 @@ class AiToolsPermissionTest {
             "diagnose_connection",
             "compare_servers",
             "search_public_sources",
+            "find_working_configs",
             "ping",
             "test_dns",
         )
