@@ -109,7 +109,7 @@ class AiAgent(
                             (mtuArguments.contains("apply") && mtuArguments.substringAfter("apply").take(16).contains("true"))
                         )
                         val mtuConsentMissing = mtuChangesTunnel &&
-                            !hasExplicitConsent(
+                            !AiActionConsent.hasExplicitConsent(
                                 history,
                                 userMessage,
                                 listOf("mtu", "probe_mtu", "ام‌تی‌یو"),
