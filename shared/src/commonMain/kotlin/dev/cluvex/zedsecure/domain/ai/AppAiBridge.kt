@@ -125,7 +125,7 @@ class AppAiBridge(
         return buildJsonObject {
             put("status", runCatching { json.parseToJsonElement(status) }.getOrElse { JsonPrimitive(status) })
             put("network", JsonPrimitive(networkDiagnostics()))
-            put("relevantLogLines", buildJsonArray { relevantLogs.forEach { add(it) } })
+            put("relevantLogLines", buildJsonArray { relevantLogs.forEach { add(JsonPrimitive(it)) } })
             put("exitInfo", runCatching { json.parseToJsonElement(exit) }.getOrElse { JsonPrimitive(exit) })
             put("limitations", "Read-only evidence, not a packet-level DNS/IP leak test. No settings were changed.")
         }.toString()
