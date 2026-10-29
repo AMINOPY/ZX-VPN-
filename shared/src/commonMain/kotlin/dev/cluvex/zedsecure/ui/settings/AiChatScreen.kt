@@ -199,8 +199,15 @@ fun AiChatScreen(
                 ) { Text(if (listening) "■" else "🎙") }
                 TextButton(
                     onClick = {
-                        voiceMode = !voiceMode
-                        if (!voiceMode) voiceController?.stopSpeaking()
+                        val enableVoice = !voiceMode
+                        voiceMode = enableVoice
+                        if (!enableVoice) {
+                            voiceController?.stopSpeaking()
+                            if (listening) {
+                                voiceController?.stopListening()
+                                listening = false
+                            }
+                        }
                     },
                     enabled = voiceController != null,
                 ) { Text(if (voiceMode) "Voice on" else "Voice") }
