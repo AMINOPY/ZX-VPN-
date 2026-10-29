@@ -13,6 +13,7 @@ import dev.cluvex.zedsecure.domain.config.VpnProfile
 import dev.cluvex.zedsecure.domain.model.AppSettings
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
@@ -120,10 +121,10 @@ class AppAiBridge(
         val exit = if (connected) runCatching { exitInfo() }.getOrElse { "exit info unavailable" }
             else "not queried: VPN is not connected"
         return buildJsonObject {
-            put("status", status)
+            put("status", runCatching { json.parseToJsonElement(status) }.getOrElse { JsonPrimitive(status) })
             put("network", networkDiagnostics())
-            put("relevantLogLines", buildJsonArray { relevantLogs.forEach { add(it) } }.toString())
-            put("exitInfo", exit)
+            put("relevantLogLines", buildJsonArray { relevantLogs.forEach { add(it) } })
+            put("exitInfo", runCatching { json.parseToJsonElement(exit) }.getOrElse { JsonPrimitive(exit) })
             put("limitations", "Read-only evidence, not a packet-level DNS/IP leak test. No settings were changed.")
         }.toString()
     }
@@ -157,9 +158,9 @@ class AppAiBridge(
     }
 
     private fun redactLogLine(line: String): String =
-        line.replace(Regex("(?i)(vless|vmess|trojan|ss|socks|wireguard|hysteria2)://\\\\S+"), "<redacted config URI>")
-            .replace(Regex("(?i)(password|token|secret|api[_-]?key|private[_-]?key)\\\\s*[:=]\\\\s*[^,\\\\s]+"), "<redacted secret>")
-            .replace(Regex("(?i)bearer\\\\s+[^,\\\\s]+"), "Bearer <redacted>")
+        line.replace(Regex("(?i)(vless|vmess|trojan|ss|socks|wireguard|hysteria2)://\\S+"), "<redacted config URI>")
+            .replace(Regex("(?i)(password|token|secret|api[_-]?key|private[_-]?key)\\s*[:=]\\s*[^,\\s]+"), "<redacted secret>")
+            .replace(Regex("(?i)bearer\\s+[^,\\s]+"), "Bearer <redacted>")
 
     override suspend fun searchPublicSources(query: String): String =
         if (query.isBlank()) "provide a non-empty search query"
