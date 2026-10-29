@@ -95,7 +95,7 @@ class AiAgent(
                             !hasExplicitDeleteConfirmation(history, userMessage)
                         val speedConsentMissing = call.name == "speed_test" &&
                             !AiActionConsent.hasExplicitConsent(
-                                history + produced,
+                                history,
                                 userMessage,
                                 listOf("speed test", "speed_test", "تست سرعت", "آزمایش سرعت"),
                                 listOf("data", "allowance", "volume", "حجم", "دیتا", "مصرف"),
@@ -107,7 +107,7 @@ class AiAgent(
                         )
                         val mtuConsentMissing = mtuChangesTunnel &&
                             !hasExplicitConsent(
-                                history + produced,
+                                history,
                                 userMessage,
                                 listOf("mtu", "probe_mtu", "ام‌تی‌یو"),
                                 listOf("15 seconds", "fifteen seconds", "pause", "قطع", "reconnect", "تنظیم"),
