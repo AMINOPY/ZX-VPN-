@@ -40,6 +40,7 @@ import dev.cluvex.zedsecure.ui.theme.ZedSecureTheme
 import kotlinx.coroutines.CompletableDeferred
 
 class MainActivity : ComponentActivity() {
+    private val aiVoiceController by lazy { dev.cluvex.zedsecure.ai.AndroidAiVoiceController(this) }
     private val configRepository: ConfigRepository
         get() = (application as ZedSecureApp).container.configRepository
 
@@ -305,6 +306,7 @@ class MainActivity : ComponentActivity() {
                 CompositionLocalProvider(LocalPlatform provides androidPlatform) {
                     val aiBridge = androidx.compose.runtime.remember {
                         dev.cluvex.zedsecure.ai.AndroidAiBridge.create(
+                            context = this@MainActivity,
                             repository = configRepository,
                             settings = repo,
                             toggleConnection = ::toggleConnection,
@@ -341,6 +343,7 @@ class MainActivity : ComponentActivity() {
                             recreate()
                         },
                         aiBridge = aiBridge,
+                        aiVoiceController = aiVoiceController,
                         appVersion = dev.cluvex.zedsecure.BuildConfig.VERSION_NAME,
                     )
 
@@ -356,6 +359,20 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == dev.cluvex.zedsecure.ai.AndroidAiVoiceController.REQUEST_MIC_PERMISSION) {
+            aiVoiceController.onMicrophonePermissionResult(
+                grantResults.firstOrNull() == android.content.pm.PackageManager.PERMISSION_GRANTED,
+            )
+        }
+    }
+
+    override fun onDestroy() {
+        if (isFinishing) aiVoiceController.shutdown()
+        super.onDestroy()
     }
 
     private val switchStopTimeoutMs = 8_000L

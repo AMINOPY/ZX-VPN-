@@ -33,6 +33,8 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.ui.input.pointer.pointerInput
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -55,6 +57,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.platform.LocalUriHandler
+import dev.cluvex.zedsecure.data.net.PingService
+import dev.cluvex.zedsecure.platform.httpGetResponse
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -160,6 +172,7 @@ internal fun LiquidHome(
     contentPadding: PaddingValues,
     onToggleConnection: () -> Unit,
     onBrowseConfigs: () -> Unit,
+    onOpenConfigFinder: () -> Unit,
     onSecretUnlocked: () -> Unit,
     onShowLogs: () -> Unit,
     onBurst: () -> Unit,
@@ -328,7 +341,25 @@ internal fun LiquidHome(
         if (quickHubOpen) {
             LiquidQuickHubOverlay(
                 page = quickHubPage,
-                onOpenPage = { quickHubPage = it },
+                networkInfo = info,
+                localProxyAddress = localProxyAddress,
+                activeConfigName = activeConfigName,
+                proxyActive = live,
+                onRefreshNetworkInfo = onRefreshInfo,
+                onOpenConfigFinder = {
+                    quickHubOpen = false
+                    quickHubPage = null
+                    onOpenConfigFinder()
+                },
+                onOpenPage = { page ->
+                    if (page == LiquidQuickHubPage.Config) {
+                        quickHubOpen = false
+                        quickHubPage = null
+                        onOpenConfigFinder()
+                    } else {
+                        quickHubPage = page
+                    }
+                },
                 onBack = { quickHubPage = null },
                 onClose = {
                     quickHubOpen = false
@@ -352,6 +383,12 @@ private enum class LiquidQuickHubPage(
 @Composable
 private fun LiquidQuickHubOverlay(
     page: LiquidQuickHubPage?,
+    networkInfo: NetworkInfo,
+    localProxyAddress: String?,
+    activeConfigName: String?,
+    proxyActive: Boolean,
+    onRefreshNetworkInfo: () -> Unit,
+    onOpenConfigFinder: () -> Unit,
     onOpenPage: (LiquidQuickHubPage) -> Unit,
     onBack: () -> Unit,
     onClose: () -> Unit,
@@ -429,7 +466,7 @@ private fun LiquidQuickHubOverlay(
                     }
                 }
                 Text(
-                    "۱۵ ثانیه نگه داشتی؛ میان‌برهای مخفی باز شدند",
+                    "۵ ثانیه نگه داشتی؛ میان‌برهای مخفی باز شدند",
                     modifier = Modifier.align(Alignment.Center).offset(y = maxHeight * 0.285f).padding(horizontal = 28.dp),
                     color = Color.White.copy(alpha = 0.86f),
                     style = MaterialTheme.typography.bodyMedium,
@@ -454,7 +491,7 @@ private fun LiquidQuickHubOverlay(
                 border = liquidBorder(),
             ) {
                 Column(
-                    Modifier.fillMaxWidth().padding(24.dp),
+                    Modifier.fillMaxWidth().heightIn(max = 472.dp).verticalScroll(rememberScrollState()).padding(24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center,
                 ) {
@@ -488,27 +525,284 @@ private fun LiquidQuickHubOverlay(
                     Spacer(Modifier.height(10.dp))
                     Text(page.description, style = MaterialTheme.typography.bodyLarge, color = cs.onSurfaceVariant, textAlign = TextAlign.Center)
                     Spacer(Modifier.height(24.dp))
-                    Surface(
-                        shape = RoundedCornerShape(20.dp),
-                        color = cs.surface.copy(alpha = 0.65f),
-                        border = liquidBorder(),
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text(
-                            "این صفحه به‌صورت اختصاصی برای Liquid Theme ساخته شده است. مرحلهٔ بعد، اتصال ابزار واقعی همین بخش خواهد بود.",
-                            Modifier.padding(16.dp),
-                            color = cs.onSurfaceVariant,
-                            style = MaterialTheme.typography.bodyMedium,
-                            textAlign = TextAlign.Center,
-                        )
+                    when (page) {
+                        LiquidQuickHubPage.Ip -> {
+                            Surface(shape = RoundedCornerShape(20.dp), color = cs.surface.copy(alpha = 0.65f), border = liquidBorder(), modifier = Modifier.fillMaxWidth()) {
+                                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    Text("IP فعلی", style = MaterialTheme.typography.titleMedium, color = cs.primary, fontWeight = FontWeight.Bold)
+                                    LiquidHubInfoRow("IPv4", networkInfo.ipv4 ?: "در دسترس نیست")
+                                    LiquidHubInfoRow("IPv6", networkInfo.ipv6 ?: "در دسترس نیست")
+                                    LiquidHubInfoRow("کشور", networkInfo.country ?: "نامشخص")
+                                    LiquidHubInfoRow("شهر / ارائه‌دهنده", listOfNotNull(networkInfo.city, networkInfo.isp).joinToString(" · ").ifBlank { "نامشخص" })
+                                    LiquidHubInfoRow("مسیر", if (networkInfo.underVpn || networkInfo.viaTunnel) "عبور از تونل گزارش شده" else "عبور از VPN تأیید نشده")
+                                    networkInfo.error?.let { Text("وضعیت بررسی: $it", style = MaterialTheme.typography.bodySmall, color = cs.error) }
+                                }
+                            }
+                            Spacer(Modifier.height(12.dp))
+                            FilledTonalButton(onClick = onRefreshNetworkInfo, enabled = !networkInfo.loading && !networkInfo.placeLoading, shapes = ButtonDefaults.shapes()) {
+                                Text(if (networkInfo.loading || networkInfo.placeLoading) "در حال بررسی…" else "بررسی دوبارهٔ IP")
+                            }
+                        }
+                        LiquidQuickHubPage.Proxy -> {
+                            Surface(shape = RoundedCornerShape(20.dp), color = cs.surface.copy(alpha = 0.65f), border = liquidBorder(), modifier = Modifier.fillMaxWidth()) {
+                                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    Text("وضعیت اتصال فعلی", style = MaterialTheme.typography.titleMedium, color = cs.primary, fontWeight = FontWeight.Bold)
+                                    LiquidHubInfoRow("پروفایل انتخاب‌شده", activeConfigName ?: "پروفایلی انتخاب نشده")
+                                    LiquidHubInfoRow("پروکسی محلی", localProxyAddress ?: "آدرس پروکسی محلی در دسترس نیست")
+                                    LiquidHubInfoRow("VPN دستگاه", if (proxyActive) "اتصال VPN فعال گزارش شده" else "اتصال فعال تأیید نشده")
+                                    Text("پروکسی تلگرام فقط مسیر خود تلگرام را تنظیم می‌کند؛ تست TCP به‌تنهایی اتصال واقعی MTProto یا امنیت اپراتور را تأیید نمی‌کند.", style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
+                                }
+                            }
+                            Spacer(Modifier.height(12.dp))
+                            TelegramProxyFinder()
+                            Spacer(Modifier.height(12.dp))
+                            Button(onClick = onOpenConfigFinder, shapes = ButtonDefaults.shapes()) { Text("رفتن به کانفیگ‌یاب VPN") }
+                        }
+                        LiquidQuickHubPage.Config -> Unit
                     }
-                    Spacer(Modifier.height(28.dp))
+                    Spacer(Modifier.height(16.dp))
                     FilledTonalButton(onClick = onBack, shapes = ButtonDefaults.shapes()) {
                         Text("بازگشت به حلقهٔ میان‌برها")
                     }
                 }
             }
         }
+    }
+}
+
+private data class TelegramProxyCandidate(
+    val link: String,
+    val host: String,
+    val port: Int,
+    val secret: String,
+    val source: String,
+    val tcpMs: Long? = null,
+    val tcpTested: Boolean = false,
+)
+
+private data class TelegramProxySource(val name: String, val url: String)
+
+private val telegramProxySources = listOf(
+    TelegramProxySource("mtproto-proxy-pro · فهرست به‌روزشونده", "https://zakky8.github.io/mtproto-proxy-pro/all_proxies.txt"),
+    TelegramProxySource("mtproto-proxy-pro · فهرست مقاوم‌تر", "https://zakky8.github.io/mtproto-proxy-pro/censorship_resistant.txt"),
+    TelegramProxySource("shablin/mtproto-proxy", "https://raw.githubusercontent.com/shablin/mtproto-proxy/main/data/valid_proxy.txt"),
+    TelegramProxySource("کانال عمومی hddify", "https://t.me/s/hddify"),
+    TelegramProxySource("کانال عمومی mitivpn", "https://t.me/s/mitivpn"),
+)
+
+private fun isPublicTelegramProxyHost(rawHost: String): Boolean {
+    val host = rawHost.trim().trim('[', ']').lowercase()
+    if (host.isBlank() || host == "localhost" || host.endsWith(".localhost") ||
+        host.endsWith(".local") || host.endsWith(".internal") || host.endsWith(".lan")) return false
+    if (!Regex("^[a-z0-9.-]{1,253}$").matches(host) || host.startsWith(".") || host.endsWith(".")) return false
+    val parts = host.split(".")
+    val looksLikeIpv4 = parts.size == 4 && parts.all { part -> part.isNotEmpty() && part.all { it.isDigit() } }
+    if (looksLikeIpv4 && parts.any { it.toIntOrNull()?.let { octet -> octet in 0..255 } != true }) return false
+    if (looksLikeIpv4) {
+        val octets = parts.map { it.toInt() }
+        val a = octets[0]
+        val b = octets[1]
+        if (a == 0 || a == 10 || a == 127 || a >= 224 ||
+            (a == 169 && b == 254) || (a == 172 && b in 16..31) ||
+            (a == 192 && b == 168) || (a == 100 && b in 64..127)) return false
+    }
+    return true
+}
+
+private fun decodeTelegramProxyValue(raw: String): String = buildString {
+    var i = 0
+    while (i < raw.length) {
+        if (raw[i] == '%' && i + 2 < raw.length) {
+            val value = raw.substring(i + 1, i + 3).toIntOrNull(16)
+            if (value != null) {
+                append(value.toChar())
+                i += 3
+                continue
+            }
+        }
+        append(raw[i])
+        i++
+    }
+}
+
+private fun parseTelegramProxyCandidates(body: String, sourceName: String): List<TelegramProxyCandidate> {
+    val normalized = body.replace("&amp;", "&", ignoreCase = true).replace("&#38;", "&", ignoreCase = true)
+    val linkRegex = Regex("""(?i)(?:tg://proxy\?[^\s<>"']+|https?://t\.me/proxy\?[^\s<>"']+)""")
+    val fromLinks = linkRegex.findAll(normalized).mapNotNull { match ->
+        val link = match.value.trimEnd(',', ';', '.', ')', ']', '}', '"', '\'')
+        val params = link.substringAfter('?', "").substringBefore('#').split('&').mapNotNull { part ->
+            val key = part.substringBefore('=', "").lowercase()
+            val value = decodeTelegramProxyValue(part.substringAfter('=', ""))
+            if (key.isBlank() || value.isBlank()) null else key to value
+        }.toMap()
+        val host = params["server"]?.trim()?.trimEnd('.') ?: return@mapNotNull null
+        val port = params["port"]?.toIntOrNull()?.takeIf { it in 1..65535 } ?: return@mapNotNull null
+        val secret = params["secret"]?.trim() ?: return@mapNotNull null
+        if (!isPublicTelegramProxyHost(host) || secret.length !in 16..512 ||
+            secret.any { it.isWhitespace() || it == '&' || it == '#' || it == '?' }) return@mapNotNull null
+        TelegramProxyCandidate("https://t.me/proxy?server=$host&port=$port&secret=$secret", host, port, secret, sourceName)
+    }.toList()
+    val fromLines = normalized.lineSequence().mapNotNull { line ->
+        val match = Regex("""^\s*([A-Za-z0-9.-]{1,253}):(\d{1,5}):([A-Za-z0-9_+./=-]{16,512})\s*$""")
+            .matchEntire(line.trim()) ?: return@mapNotNull null
+        val host = match.groupValues[1]
+        val port = match.groupValues[2].toIntOrNull()?.takeIf { it in 1..65535 } ?: return@mapNotNull null
+        val secret = match.groupValues[3]
+        if (!isPublicTelegramProxyHost(host) || secret.length !in 16..512) return@mapNotNull null
+        TelegramProxyCandidate("https://t.me/proxy?server=$host&port=$port&secret=$secret", host, port, secret, sourceName)
+    }.toList()
+    return fromLinks + fromLines
+}
+
+@Composable
+private fun TelegramProxyFinder() {
+    val cs = MaterialTheme.colorScheme
+    val scope = rememberCoroutineScope()
+    val uriHandler = LocalUriHandler.current
+    var candidates by remember { mutableStateOf<List<TelegramProxyCandidate>>(emptyList()) }
+    var query by remember { mutableStateOf("") }
+    var manualInput by remember { mutableStateOf("") }
+    var onlyReachable by remember { mutableStateOf(false) }
+    var loading by remember { mutableStateOf(false) }
+    var testing by remember { mutableStateOf(false) }
+    var testProgress by remember { mutableIntStateOf(0) }
+    var testTotal by remember { mutableIntStateOf(0) }
+    var status by remember { mutableStateOf("برای دریافت فهرست تازه، «جست‌وجوی پروکسی‌ها» را بزن.") }
+    var sourcesOk by remember { mutableIntStateOf(0) }
+    var sourcesFailed by remember { mutableIntStateOf(0) }
+    val visible = candidates.filter {
+        (it.host.contains(query, true) || it.source.contains(query, true)) &&
+            (!onlyReachable || it.tcpMs != null)
+    }
+
+    Surface(shape = RoundedCornerShape(24.dp), color = cs.surface.copy(alpha = 0.72f), border = liquidBorder(), modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("Telegram Proxy Finder", style = MaterialTheme.typography.titleLarge, color = cs.primary, fontWeight = FontWeight.Bold)
+            Text("کشف MTProto از چند منبع عمومی، حذف تکراری‌ها، مرتب‌سازی بر اساس تأخیر TCP و بازکردن مستقیم در تلگرام.", style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Button(
+                    enabled = !loading && !testing,
+                    onClick = {
+                        scope.launch {
+                            loading = true
+                            status = "در حال دریافت فهرست‌ها…"
+                            sourcesOk = 0
+                            sourcesFailed = 0
+                            try {
+                                val fetched = coroutineScope {
+                                    telegramProxySources.map { source -> async {
+                                        runCatching {
+                                            val response = withContext(Dispatchers.IO) {
+                                                httpGetResponse(source.url, "ZX-VPN-TelegramProxyFinder/1.1", connectTimeoutMs = 7000, readTimeoutMs = 9000)
+                                            }
+                                            if (response.code !in 200..299) error("HTTP ${response.code}")
+                                            source to response.body.take(1024 * 1024)
+                                        }.getOrNull()
+                                    } }.awaitAll()
+                                }
+                                sourcesOk = fetched.count { it != null }
+                                sourcesFailed = fetched.size - sourcesOk
+                                val parsed = fetched.filterNotNull().flatMap { (source, body) ->
+                                    parseTelegramProxyCandidates(body, source.name)
+                                }.distinctBy { "${it.host.lowercase()}:${it.port}:${it.secret.lowercase()}" }
+                                candidates = parsed
+                                status = if (parsed.isEmpty()) "منبع‌ها پاسخ دادند، اما پروکسی قابل‌خواندن پیدا نشد. بعداً دوباره تلاش کن." else "${parsed.size} پروکسی یکتا از ${sourcesOk} منبع دریافت شد؛ هنوز اتصال تلگرام تأیید نشده است."
+                            } catch (e: Exception) {
+                                status = "دریافت فهرست ناموفق بود: ${e.message ?: "خطای شبکه"}"
+                            } finally { loading = false }
+                        }
+                    },
+                    shapes = ButtonDefaults.shapes(),
+                ) { Text(if (loading) "در حال جست‌وجو…" else "جست‌وجوی پروکسی‌ها") }
+                FilledTonalButton(
+                    enabled = candidates.isNotEmpty() && !loading && !testing,
+                    onClick = {
+                        scope.launch {
+                            testing = true
+                            testProgress = 0
+                            testTotal = minOf(candidates.size, 80)
+                            status = "در حال سنجش دسترسی TCP؛ این تست، handshake تلگرام نیست…"
+                            try {
+                                val semaphore = Semaphore(4)
+                                val checked = coroutineScope {
+                                    candidates.take(80).map { candidate -> async {
+                                        semaphore.withPermit {
+                                            val ms = runCatching { PingService.tcpPing(candidate.host, candidate.port, timeoutMs = 2500) }.getOrDefault(-1L)
+                                            testProgress += 1
+                                            candidate.copy(tcpMs = ms.takeIf { it > 0 }, tcpTested = true)
+                                        }
+                                    } }.awaitAll()
+                                }
+                                val checkedIds = checked.associateBy { "${it.host.lowercase()}:${it.port}:${it.secret.lowercase()}" }
+                                candidates = candidates.map { checkedIds["${it.host.lowercase()}:${it.port}:${it.secret.lowercase()}"] ?: it }
+                                    .sortedWith(compareBy<TelegramProxyCandidate>({ if (it.tcpMs != null) 0 else if (!it.tcpTested) 1 else 2 }, { it.tcpMs ?: Long.MAX_VALUE }))
+                                val reachable = checked.count { (it.tcpMs ?: -1L) > 0 }
+                                status = "تست TCP تمام شد: ${reachable} از ${checked.size} میزبان پاسخ دادند. handshake واقعی MTProto در این نسخه انجام نشده است."
+                            } catch (e: Exception) {
+                                status = "تست TCP کامل نشد: ${e.message ?: "خطای شبکه"}"
+                            } finally { testing = false }
+                        }
+                    },
+                    shapes = ButtonDefaults.shapes(),
+                ) { Text(if (testing) "در حال تست…" else "تست TCP") }
+            }
+            if (loading || testing) {
+                LinearWavyProgressIndicator(modifier = Modifier.fillMaxWidth(), color = cs.primary)
+                if (testing) Text("پیشرفت تست: $testProgress از $testTotal", style = MaterialTheme.typography.labelSmall, color = cs.onSurfaceVariant)
+            }
+            OutlinedTextField(value = query, onValueChange = { query = it }, modifier = Modifier.fillMaxWidth(), singleLine = true, label = { Text("فیلتر بر اساس دامنه یا منبع") })
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(selected = !onlyReachable, onClick = { onlyReachable = false }, label = { Text("همه") })
+                FilterChip(selected = onlyReachable, onClick = { onlyReachable = true }, label = { Text("TCP پاسخ‌گو") })
+                Text("${visible.size} نتیجه", style = MaterialTheme.typography.labelMedium, color = cs.onSurfaceVariant)
+            }
+            OutlinedTextField(value = manualInput, onValueChange = { manualInput = it }, modifier = Modifier.fillMaxWidth(), minLines = 2, label = { Text("لینک پروکسی یا host:port:secret") })
+            FilledTonalButton(
+                enabled = manualInput.isNotBlank() && !loading && !testing,
+                onClick = {
+                    val parsed = parseTelegramProxyCandidates(manualInput, "ورودی دستی")
+                    if (parsed.isEmpty()) {
+                        status = "لینک MTProto معتبر پیدا نشد؛ فرمت t.me/proxy یا host:port:secret را وارد کن."
+                    } else {
+                        val combined = (candidates + parsed).distinctBy { "${it.host.lowercase()}:${it.port}:${it.secret.lowercase()}" }
+                        candidates = combined
+                        status = "${parsed.size} ورودی بررسی شد؛ موارد تکراری حذف شدند."
+                        manualInput = ""
+                    }
+                },
+                shapes = ButtonDefaults.shapes(),
+            ) { Text("افزودن ورودی دستی") }
+            Text("$status", style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
+            if (sourcesFailed > 0) Text("منابع ناموفق: $sourcesFailed از ${telegramProxySources.size}", style = MaterialTheme.typography.labelSmall, color = cs.error)
+            Column(Modifier.fillMaxWidth().heightIn(max = 360.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                visible.forEachIndexed { index, item ->
+                    Surface(shape = RoundedCornerShape(16.dp), color = cs.surfaceVariant.copy(alpha = 0.45f), border = androidx.compose.foundation.BorderStroke(1.dp, cs.outlineVariant.copy(alpha = 0.5f)), modifier = Modifier.fillMaxWidth()) {
+                        Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text("${index + 1}. ${item.host}:${item.port}", modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                                Text(if (!item.tcpTested) "تست‌نشده" else if ((item.tcpMs ?: -1L) > 0) "TCP قابل‌دسترسی" else "TCP ناموفق", style = MaterialTheme.typography.labelSmall, color = if (item.tcpMs != null) cs.primary else cs.onSurfaceVariant)
+                            }
+                            Text(item.source, style = MaterialTheme.typography.labelSmall, color = cs.onSurfaceVariant)
+                            Text(if (item.tcpMs != null) "تأخیر TCP: ${item.tcpMs} ms" else if (item.tcpTested) "پاسخی در مهلت تست دریافت نشد" else "تأخیر هنوز اندازه‌گیری نشده", style = MaterialTheme.typography.bodySmall)
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Button(onClick = { runCatching { uriHandler.openUri(item.link) }.onFailure { status = "بازکردن لینک ممکن نشد: ${it.message ?: "خطا"}" } }, shapes = ButtonDefaults.shapes()) { Text("بازکردن در تلگرام") }
+                                TextButton(onClick = { status = "لینک انتخاب شد؛ برای امنیت، پیش از فعال‌سازی به اپراتور پروکسی اعتماد کن. این فهرست عمومی است." }) { Text("نکته امنیتی") }
+                            }
+                        }
+                    }
+                }
+                if (visible.isEmpty()) Text("هنوز نتیجه‌ای نیست. جست‌وجو را اجرا کن یا فیلتر را پاک کن.", modifier = Modifier.padding(8.dp), color = cs.onSurfaceVariant)
+            }
+            Text("مهم: «TCP قابل‌دسترسی» فقط بازبودن مسیر TCP را نشان می‌دهد؛ برای تأیید واقعی Telegram/MTProto به handshake کلاینت تلگرام یا TDLib نیاز است. پروکسی عمومی ممکن است هر لحظه از کار بیفتد.", style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun LiquidHubInfoRow(label: String, value: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
     }
 }
 
@@ -740,7 +1034,7 @@ private fun LiquidOrb(
                             onLongPress()
                         }
                         val hubJob = gestureScope.launch {
-                            delay(15_000L)
+                            delay(5_000L)
                             longTriggered = true
                             onOpenQuickHub()
                         }

@@ -56,6 +56,34 @@ object AiTools {
             OBJ,
         ),
         AiTool(
+            "diagnose_connection",
+            "Run a read-only connection diagnosis using current VPN state, local network metadata, relevant error logs and (only when connected) observed exit IP/country. It never changes settings and is not a packet-level leak test.",
+            OBJ,
+        ),
+        AiTool(
+            "compare_servers",
+            "Measure real latency for saved servers and return results ordered from lowest measured latency to failures. This performs real connection probes and may take several seconds per server; it does not connect the VPN or guarantee throughput.",
+            OBJ,
+        ),
+        AiTool(
+            "network_diagnostics",
+            "Read-only local Android network metadata: active transport, validated connectivity, DNS server count, IPv4/IPv6 route counts, and whether an HTTP proxy is configured. It does not reveal DNS addresses, contact remote hosts, or prove that a VPN has no leaks.",
+            OBJ,
+        ),
+        AiTool(
+            "search_public_sources",
+            "Search public GitHub repository metadata for relevant projects. This does not search code contents, validate any IP, or prove a server is safe or working. Treat results as leads only; never claim an IP is clean without a real, authorized test.",
+            obj("query" to str("Short topic/query to find public repositories, e.g. public DNS benchmark or proxy configuration sources."), required = listOf("query")),
+        ),
+        AiTool(
+            "find_working_configs",
+            "Search public GitHub config-project READMEs, keep only links the app parser recognizes, then test up to 12 candidates using the real engine latency probe (three samples, median). This can take time and uses network traffic. Returns only tested candidate IDs, protocol labels and measured latency, never raw credentials/links to the AI provider. A successful probe is point-in-time evidence, not a full-device TUN, DNS/IP leak, privacy or security guarantee. Does not add anything to the server list.",
+            obj(
+                "query" to str("Optional search phrase such as country or protocol; keep short."),
+                "maxResults" to int("Maximum number of successful tested candidates to return, 1-5; default 5."),
+            ),
+        ),
+        AiTool(
             "list_protocols",
             "Every engine this build can create directly, with the fields each one takes and which " +
                 "are required. Read it before create_server rather than assuming a field name.",
@@ -82,12 +110,12 @@ object AiTools {
         ),
         AiTool(
             "test_dns",
-            "Resolves a hostname through one DNS server and reports whether it answered, how fast, " +
-                "and what it returned. Use it to prove a DNS setting works BEFORE writing it into " +
-                "the settings, so a broken resolver is never saved.",
+            "UDP mode only checks whether the resolver responds; it does not query the supplied hostname. " +
+                "DoH mode resolves the supplied hostname and reports the returned addresses. TCP and DoT " +
+                "are not implemented by this probe; do not claim they were tested.",
             obj(
-                "server" to str("The resolver: an IP for plain DNS, or a URL for DoH, or a hostname for DoT."),
-                "mode" to str("One of: udp, tcp, dot, doh."),
+                "server" to str("The resolver: an IP for plain UDP DNS or a URL for DoH. This build does not probe DoT."),
+                "mode" to str("Supported modes: udp (resolver responsiveness only) or doh (resolve the hostname)."),
                 "host" to str("The name to resolve. Default www.google.com."),
                 required = listOf("server", "mode"),
             ),
@@ -148,6 +176,11 @@ object AiTools {
             destructive = true,
         ),
         AiTool(
+            "add_tested_configs",
+            "Adds only previously measured-success candidates returned by find_working_configs. Call only after asking in a previous assistant turn whether to add the tested configurations and receiving an explicit affirmative in the current user turn. Use the candidate IDs exactly as returned. A no/unclear answer must add nothing.",
+            obj("candidate_ids" to str("Comma-separated candidate IDs from the most recent find_working_configs result; choose at most 5."), required = listOf("candidate_ids")),
+        ),
+        AiTool(
             "import_config",
             "Imports a config the user pasted: a share link (vless://, vmess://, trojan://, ss://, " +
                 "wireguard, vpn:// …), a subscription URL, or the text of a .conf/.ovpn/JSON file. " +
@@ -180,9 +213,40 @@ object AiTools {
         ),
     )
 
-    suspend fun run(call: AiToolCall, bridge: AiAppBridge): AiToolResult {
+    private val changingToolNames = setOf(
+        "apply_settings", "set_active_server", "connect", "disconnect",
+        "import_config", "add_tested_configs", "delete_server", "create_server",
+    )
+
+    fun isBlockedByReadOnly(toolName: String, allowChanges: Boolean): Boolean =
+        !allowChanges && toolName in changingToolNames
+
+    fun isBlockedByPermission(toolName: String, argumentsJson: String, allowChanges: Boolean): Boolean {
+        if (isBlockedByReadOnly(toolName, allowChanges)) return true
+        if (toolName != "probe_mtu" || allowChanges) return false
+        val args = runCatching { aiJson.parseToJsonElement(argumentsJson).jsonObject }
+            .getOrElse { JsonObject(emptyMap()) }
+        return listOf("reconnect", "apply").any { key ->
+            args[key]?.jsonPrimitive?.contentOrNull.toBoolean()
+        }
+    }
+
+    suspend fun run(
+        call: AiToolCall,
+        bridge: AiAppBridge,
+        allowChanges: Boolean = false,
+    ): AiToolResult {
         val args = runCatching { aiJson.parseToJsonElement(call.argumentsJson).jsonObject }
             .getOrElse { JsonObject(emptyMap()) }
+        // Enforce permissions at execution time, including side-effecting arguments of mixed tools.
+        if (isBlockedByPermission(call.name, call.argumentsJson, allowChanges)) {
+            val reason = if (call.name == "probe_mtu") {
+                "blocked: reconnecting the VPN or applying an MTU changes app state. Enable assistant changes first; no action was performed."
+            } else {
+                "blocked: changes are disabled in the assistant settings. No action was performed."
+            }
+            return AiToolResult(call.id, call.name, reason, failed = true)
+        }
         fun s(name: String, fallback: String = "") =
             args[name]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() } ?: fallback
         fun i(name: String, fallback: Int) = args[name]?.jsonPrimitive?.intOrNull ?: fallback
@@ -195,6 +259,12 @@ object AiTools {
                 "get_status" -> bridge.statusJson()
                 "read_logs" -> bridge.logsText(i("lines", 120).coerceIn(20, 500))
                 "core_report" -> bridge.coreReport()
+                "network_diagnostics" -> bridge.networkDiagnostics()
+                "diagnose_connection" -> bridge.diagnoseConnection()
+                "compare_servers" -> bridge.compareServers()
+                "search_public_sources" -> bridge.searchPublicSources(s("query"))
+                "find_working_configs" -> bridge.findWorkingConfigs(s("query"), i("maxResults", 5).coerceIn(1, 5))
+                "add_tested_configs" -> bridge.addTestedConfigs(s("candidate_ids"))
                 "app_map" -> bridge.appMapJson()
                 "list_protocols" -> bridge.protocolsJson()
                 "ping" -> bridge.ping(s("id").takeIf { it.isNotBlank() })

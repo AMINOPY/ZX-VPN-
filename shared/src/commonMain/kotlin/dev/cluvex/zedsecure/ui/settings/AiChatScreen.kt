@@ -41,6 +41,7 @@ import dev.cluvex.zedsecure.domain.ai.AiRole
 import dev.cluvex.zedsecure.domain.ai.AiSettings
 import dev.cluvex.zedsecure.domain.ai.AiSystemPrompt
 import dev.cluvex.zedsecure.domain.ai.AiTurn
+import dev.cluvex.zedsecure.domain.ai.AiVoiceController
 import dev.cluvex.zedsecure.shared.resources.Res
 import dev.cluvex.zedsecure.shared.resources.ai_chat_hint
 import dev.cluvex.zedsecure.shared.resources.ai_example_fastest
@@ -56,6 +57,7 @@ import org.jetbrains.compose.resources.stringResource
 fun AiChatScreen(
     settings: AiSettings,
     bridge: AiAppBridge,
+    voiceController: AiVoiceController? = null,
     languageName: String,
     languageNative: String,
     platform: String,
@@ -69,6 +71,9 @@ fun AiChatScreen(
     val steps = remember { mutableStateListOf<String>() }
     var draft by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
+    var voiceMode by remember { mutableStateOf(false) }
+    var listening by remember { mutableStateOf(false) }
+    var voiceStatus by remember { mutableStateOf<String?>(null) }
     val listState = rememberLazyListState()
 
     val agent = remember(settings.provider, settings.model(), settings.allowChanges, languageName) {
@@ -91,6 +96,44 @@ fun AiChatScreen(
     LaunchedEffect(history.size, steps.size) {
         val last = history.size + steps.size - 1
         if (last >= 0) runCatching { listState.animateScrollToItem(last) }
+    }
+
+    fun submitMessage(rawMessage: String) {
+        val message = rawMessage.trim()
+        if (message.isBlank() || busy) return
+        draft = ""
+        busy = true
+        steps.clear()
+        voiceStatus = null
+        scope.launch {
+            val produced = runCatching {
+                agent.ask(history.toList(), message) { step ->
+                    when (step) {
+                        is AiAgent.Step.Calling -> steps += "→ ${step.name}"
+                        is AiAgent.Step.Called -> steps += if (step.result.failed) {
+                            "✕ ${step.result.name}: ${step.result.content.take(200)}"
+                        } else {
+                            "✓ ${step.result.name}"
+                        }
+                        is AiAgent.Step.Failed -> steps += "✕ ${step.message}"
+                        else -> Unit
+                    }
+                }
+            }.getOrElse { e ->
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                listOf(
+                    AiTurn(AiRole.USER, message),
+                    AiTurn(AiRole.ASSISTANT, "", error = e.message ?: e::class.simpleName),
+                )
+            }
+            history.addAll(produced)
+            if (voiceMode) {
+                produced.lastOrNull { it.role == AiRole.ASSISTANT && it.text.isNotBlank() }?.text
+                    ?.let { voiceController?.speak(it) }
+            }
+            steps.clear()
+            busy = false
+        }
     }
 
     Column(modifier.fillMaxSize().padding(contentPadding)) {
@@ -117,7 +160,7 @@ fun AiChatScreen(
         }
 
         Row(
-            Modifier.fillMaxWidth().padding(12.dp),
+            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
             verticalAlignment = Alignment.Bottom,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
@@ -125,51 +168,65 @@ fun AiChatScreen(
                 value = draft,
                 onValueChange = { draft = it },
                 placeholder = { Text(stringResource(Res.string.ai_chat_hint)) },
-                enabled = !busy,
+                enabled = !busy && !listening,
                 maxLines = 4,
                 modifier = Modifier.weight(1f),
             )
-            FilledIconButton(
-                enabled = draft.isNotBlank() && !busy,
-                onClick = {
-                    val message = draft.trim()
-                    draft = ""
-                    busy = true
-                    steps.clear()
-                    scope.launch {
-                        val produced = runCatching {
-                        agent.ask(history.toList(), message) { step ->
-                            when (step) {
-                                is AiAgent.Step.Calling -> steps += "→ ${step.name}"
-                                is AiAgent.Step.Called -> steps += if (step.result.failed) {
-                                    "✕ ${step.result.name}: ${step.result.content.take(200)}"
-                                } else {
-                                    "✓ ${step.result.name}"
-                                }
-                                is AiAgent.Step.Failed -> steps += "✕ ${step.message}"
-                                else -> Unit
-                            }
-                        }
-                        }.getOrElse { e ->
-                            if (e is kotlinx.coroutines.CancellationException) throw e
-
-                            listOf(
-                                AiTurn(AiRole.USER, message),
-                                AiTurn(AiRole.ASSISTANT, "", error = e.message ?: e::class.simpleName),
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                FilledIconButton(
+                    enabled = voiceController != null && !busy,
+                    onClick = {
+                        voiceMode = true
+                        if (listening) {
+                            voiceController?.stopListening()
+                            listening = false
+                        } else {
+                            voiceStatus = "Listening…"
+                            listening = true
+                            voiceController?.startListening(
+                                onResult = { spoken ->
+                                    listening = false
+                                    voiceStatus = "Recognized speech"
+                                    submitMessage(spoken)
+                                },
+                                onError = { error ->
+                                    listening = false
+                                    voiceStatus = error
+                                },
                             )
                         }
-                        history.addAll(produced)
-                        steps.clear()
-                        busy = false
-                    }
-                },
-            ) {
-                if (busy) {
-                    CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                } else {
-                    Text("\u27A4")
-                }
+                    },
+                ) { Text(if (listening) "■" else "🎙") }
+                TextButton(
+                    onClick = {
+                        val enableVoice = !voiceMode
+                        voiceMode = enableVoice
+                        if (!enableVoice) {
+                            voiceController?.stopSpeaking()
+                            if (listening) {
+                                voiceController?.stopListening()
+                                listening = false
+                            }
+                        }
+                    },
+                    enabled = voiceController != null,
+                ) { Text(if (voiceMode) "Voice on" else "Voice") }
             }
+            FilledIconButton(
+                enabled = draft.isNotBlank() && !busy && !listening,
+                onClick = { submitMessage(draft) },
+            ) {
+                if (busy) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                else Text("\u27A4")
+            }
+        }
+        voiceStatus?.let {
+            Text(
+                it,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 16.dp, bottom = 6.dp),
+            )
         }
     }
 }

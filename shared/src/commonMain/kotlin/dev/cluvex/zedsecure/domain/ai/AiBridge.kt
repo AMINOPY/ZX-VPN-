@@ -11,6 +11,18 @@ interface AiAppBridge {
 
     fun coreReport(): String
 
+    fun networkDiagnostics(): String
+
+    suspend fun diagnoseConnection(): String
+
+    suspend fun compareServers(): String
+
+    suspend fun searchPublicSources(query: String): String
+
+    suspend fun findWorkingConfigs(query: String, maxResults: Int): String
+
+    suspend fun addTestedConfigs(candidateIds: String): String
+
     fun appMapJson(): String
 
     fun applySettings(patchJson: String): String
@@ -38,6 +50,13 @@ interface AiAppBridge {
     suspend fun probeMtu(reconnect: Boolean = false, apply: Boolean = false): String
 
     suspend fun exitInfo(): String
+}
+
+interface AiVoiceController {
+    fun startListening(onResult: (String) -> Unit, onError: (String) -> Unit)
+    fun stopListening()
+    fun speak(text: String)
+    fun stopSpeaking()
 }
 
 const val AI_UNSUPPORTED = "not available on this platform"

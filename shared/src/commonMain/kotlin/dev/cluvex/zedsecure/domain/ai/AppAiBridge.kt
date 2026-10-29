@@ -13,10 +13,12 @@ import dev.cluvex.zedsecure.domain.config.VpnProfile
 import dev.cluvex.zedsecure.domain.model.AppSettings
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 
@@ -26,6 +28,10 @@ class AppAiBridge(
     private val writeSettings: (AppSettings) -> Unit,
 
     private val coreReportFn: () -> String = { AI_UNSUPPORTED },
+    private val networkReportFn: () -> String = { AI_UNSUPPORTED },
+    private val searchPublicSourcesFn: suspend (String) -> String = { AI_UNSUPPORTED },
+    private val findWorkingConfigsFn: suspend (String, Int) -> String = { _, _ -> AI_UNSUPPORTED },
+    private val addTestedConfigsFn: suspend (String) -> String = { AI_UNSUPPORTED },
     private val connectFn: suspend () -> String = { AI_UNSUPPORTED },
     private val disconnectFn: suspend () -> String = { AI_UNSUPPORTED },
     private val speedTestFn: suspend () -> String = { AI_UNSUPPORTED },
@@ -91,10 +97,85 @@ class AppAiBridge(
     override fun logsText(lines: Int): String {
         val all = LogBus.lines.value
         if (all.isEmpty()) return "the log is empty — nothing has been recorded since the app started"
-        return all.takeLast(lines).joinToString("\n")
+        return all.takeLast(lines).joinToString("\n") { redactLogLine(it) }
     }
 
     override fun coreReport(): String = runCatching { coreReportFn() }.getOrElse { it.message ?: AI_UNSUPPORTED }
+
+    override fun networkDiagnostics(): String =
+        runCatching { networkReportFn() }.getOrElse { it.message ?: AI_UNSUPPORTED }
+
+    override suspend fun diagnoseConnection(): String {
+        val status = statusJson()
+        val relevantLogs = LogBus.lines.value.asSequence()
+            .filter { line ->
+                val lower = line.lowercase()
+                listOf("error", "exception", "failed", "failure", "timeout", "timed out",
+                    "dns", "handshake", "tls", "route", "unreachable", "refused").any { it in lower }
+            }
+            .toList()
+            .takeLast(20)
+            .map { line -> redactLogLine(line).take(500) }
+            .toList()
+        val connected = runCatching {
+            json.parseToJsonElement(status).jsonObject["connected"]?.jsonPrimitive?.contentOrNull == "true"
+        }.getOrDefault(false)
+        val exit = if (connected) runCatching { exitInfo() }.getOrElse { "exit info unavailable" }
+            else "not queried: VPN is not connected"
+        return buildJsonObject {
+            put("status", runCatching { json.parseToJsonElement(status) }.getOrElse { JsonPrimitive(status) })
+            put("network", JsonPrimitive(networkDiagnostics()))
+            put("relevantLogLines", buildJsonArray { relevantLogs.forEach { add(JsonPrimitive(it)) } })
+            put("exitInfo", runCatching { json.parseToJsonElement(exit) }.getOrElse { JsonPrimitive(exit) })
+            put("limitations", "Read-only evidence, not a packet-level DNS/IP leak test. No settings were changed.")
+        }.toString()
+    }
+
+    override suspend fun compareServers(): String {
+        val allProfiles = repository.profiles.value
+        if (allProfiles.isEmpty()) return "there are no saved servers to compare"
+        // Bound the probe cost so a large subscription cannot trigger an unbounded diagnostic run.
+        val measured = allProfiles.take(30).map { profile ->
+            val latency = runCatching {
+                PingService.realDelay(profile, chainConfig = chainConfig)
+            }.getOrDefault(-1L)
+            buildJsonObject {
+                put("id", profile.id)
+                put("name", profile.name)
+                if (latency > 0) put("latencyMs", latency) else put("failed", true)
+            }
+        }
+        val sorted = measured.sortedWith(
+            compareBy<kotlinx.serialization.json.JsonObject> {
+                it["latencyMs"]?.jsonPrimitive?.contentOrNull?.toLongOrNull() ?: Long.MAX_VALUE
+            }.thenBy { it["name"]?.jsonPrimitive?.contentOrNull.orEmpty() },
+        )
+        return buildJsonObject {
+            put("tested", sorted.size)
+            put("totalSaved", allProfiles.size)
+            put("truncated", allProfiles.size > sorted.size)
+            put("results", buildJsonArray { sorted.forEach { add(it) } })
+            put("note", "Latency is a point-in-time probe, not throughput or a guarantee of future availability.")
+        }.toString()
+    }
+
+    private fun redactLogLine(line: String): String =
+        line.replace(Regex("(?i)(vless|vmess|trojan|ss|socks|wireguard|hysteria2)://\\S+"), "<redacted config URI>")
+            .replace(Regex("(?i)(password|token|secret|api[_-]?key|private[_-]?key)\\s*[:=]\\s*[^,\\s]+"), "<redacted secret>")
+            .replace(Regex("(?i)bearer\\s+[^,\\s]+"), "Bearer <redacted>")
+
+    override suspend fun searchPublicSources(query: String): String =
+        if (query.isBlank()) "provide a non-empty search query"
+        else runCatching { searchPublicSourcesFn(query.take(160)) }.getOrElse { it.message ?: AI_UNSUPPORTED }
+
+    override suspend fun findWorkingConfigs(query: String, maxResults: Int): String =
+        if (query.isBlank()) "provide a non-empty search query"
+        else runCatching { findWorkingConfigsFn(query.take(160), maxResults.coerceIn(1, 5)) }
+            .getOrElse { it.message ?: AI_UNSUPPORTED }
+
+    override suspend fun addTestedConfigs(candidateIds: String): String =
+        if (candidateIds.isBlank()) "no tested candidate IDs were supplied; nothing was added"
+        else runCatching { addTestedConfigsFn(candidateIds) }.getOrElse { it.message ?: AI_UNSUPPORTED }
 
     override fun appMapJson(): String = APP_MAP
 

@@ -62,9 +62,7 @@ APK مخصوص دستگاهتان از [Releases](https://github.com/AMINOPY/ZX-
 (`arm64-v8a` برای تقریباً همهٔ گوشی‌ها، `armeabi-v7a` برای گوشی‌های قدیمی‌تر).
 
 **لینوکس:** فایل `.deb`، `.rpm`، `.AppImage` یا `.tar.gz` از Releases. روی آرچ لینوکس، بستهٔ
-[`zedsecure-bin`](https://aur.archlinux.org/packages/zedsecure-bin) که کاربران ساخته‌اند در AUR هست:
-`yay -S zedsecure-bin`. روی NixOS:
-`nix run github:CluvexStudio/ZedSecure`
+بسته‌های لینوکسِ جامعه ممکن است نام نصب متفاوتی از فایل‌های رسمی ZX VPN داشته باشند.
 
 **ویندوز:** نصب‌کنندهٔ `.msi`، یا نسخهٔ قابل حمل `.zip`.
 
@@ -83,7 +81,7 @@ APK مخصوص دستگاهتان از [Releases](https://github.com/AMINOPY/ZX-
 
 </div>
 
-همهٔ هسته‌ها در [ZedSecure-Cores](https://github.com/CluvexStudio/ZedSecure-Cores) ساخته می‌شوند؛
+همهٔ هسته‌ها در [ZX VPN Cores](https://github.com/CluvexStudio/ZedSecure-Cores) ساخته می‌شوند؛
 برای هر هسته یک workflow، از فورک‌ها و کامیت‌های دقیقی که در `pins.txt` آن آمده است.
 [`tools/cores.txt`](tools/cores.txt) نشان می‌دهد هر نسخه کدام بیلد را برمی‌دارد. زدن تگ `v*` نسخهٔ
 اندروید و همهٔ نسخه‌های دسکتاپ را در CI می‌سازد و همه را در یک ریلیز می‌گذارد؛ اندروید و دسکتاپ یک

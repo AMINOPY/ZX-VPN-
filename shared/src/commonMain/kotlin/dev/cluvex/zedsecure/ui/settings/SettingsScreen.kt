@@ -221,6 +221,7 @@ fun SettingsScreen(
                 AiChatScreen(
                     settings = it.settings,
                     bridge = it.bridge,
+                    voiceController = it.voiceController,
                     languageName = it.languageName,
                     languageNative = it.languageNative,
                     platform = it.platform,

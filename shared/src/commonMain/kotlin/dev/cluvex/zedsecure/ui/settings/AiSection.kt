@@ -7,6 +7,7 @@ data class AiSection(
     val settings: AiSettings,
     val onUpdate: (AiSettings) -> Unit,
     val bridge: AiAppBridge,
+    val voiceController: dev.cluvex.zedsecure.domain.ai.AiVoiceController? = null,
     val onOpenUrl: (String) -> Unit,
 
     val languageName: String,

@@ -31,6 +31,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import org.jetbrains.compose.resources.painterResource
@@ -73,10 +77,13 @@ fun MainScaffold(
     onLanguage: (AppLanguage) -> Unit,
 
     aiBridge: dev.cluvex.zedsecure.domain.ai.AiAppBridge? = null,
+    aiVoiceController: dev.cluvex.zedsecure.domain.ai.AiVoiceController? = null,
     appVersion: String = "",
 ) {
     val platform = dev.cluvex.zedsecure.ui.platform.LocalPlatform.current
     var current by rememberSaveable { mutableStateOf(TopDestination.Home) }
+    var showConfigFinder by rememberSaveable { mutableStateOf(false) }
+    val configFinderScope = rememberCoroutineScope()
 
     var setupDone by rememberSaveable {
         mutableStateOf(settings.onboardingVersion >= dev.cluvex.zedsecure.ui.onboarding.ONBOARDING_VERSION)
@@ -245,6 +252,7 @@ fun MainScaffold(
                         current = if (activeProfile?.isLocked == true) TopDestination.Vault
                         else TopDestination.Servers
                     },
+                    onOpenConfigFinder = { showConfigFinder = true },
                     onSecretUnlocked = { spaceUnlocked = true },
                 )
                 TopDestination.Servers -> ServersScreen(
@@ -309,6 +317,7 @@ fun MainScaffold(
                             settings = settings.ai,
                             onUpdate = { next -> onUpdateSettings { it.copy(ai = next) } },
                             bridge = bridge,
+                            voiceController = aiVoiceController,
                             onOpenUrl = { url -> platform.openUri(url) },
 
                             languageName = languageEnglishName(settings.language),
@@ -346,6 +355,71 @@ fun MainScaffold(
             modifier = Modifier.padding(innerPadding),
         )
       }
+    }
+
+    if (showConfigFinder) {
+        dev.cluvex.zedsecure.ui.servers.ConfigFinderSheet(
+            onDismiss = { showConfigFinder = false },
+            onImport = { link ->
+                showConfigFinder = false
+                configFinderScope.launch {
+                    val imported = withContext(Dispatchers.Default) {
+                        configRepository.importPasted(link)
+                    }
+                    imported.onSuccess { result ->
+                        platform.toast(
+                            when {
+                                result.count > 0 -> "کانفیگ با موفقیت افزوده شد"
+                                result.duplicates > 0 -> "این کانفیگ از قبل وجود دارد"
+                                else -> "کانفیگی افزوده نشد"
+                            },
+                        )
+                        if (result.count > 0) current = TopDestination.Servers
+                    }.onFailure {
+                        platform.toast("افزودن کانفیگ ناموفق بود")
+                    }
+                }
+            },
+            onConnect = { link ->
+                showConfigFinder = false
+                configFinderScope.launch {
+                    val previousIds = configRepository.profiles.value.map { it.id }.toSet()
+                    val imported = withContext(Dispatchers.Default) {
+                        configRepository.importPasted(link)
+                    }
+                    imported.onSuccess { result ->
+                        val profilesNow = configRepository.profiles.value
+                        val addedProfile = profilesNow.lastOrNull { it.id !in previousIds }
+                        // Import can legitimately report a duplicate. Reuse that exact saved profile
+                        // instead of making the "افزودن و اتصال" action silently fail.
+                        val existingProfile = if (result.duplicates > 0) {
+                            profilesNow.firstOrNull { it.rawPayload()?.trim() == link.trim() }
+                        } else {
+                            null
+                        }
+                        val targetProfile = addedProfile ?: existingProfile
+                        if ((result.count > 0 || result.duplicates > 0) && targetProfile != null) {
+                            configRepository.setActive(targetProfile.id)
+                            current = TopDestination.Servers
+                            onActiveServerChanged()
+                            kotlinx.coroutines.delay(250)
+                            if (result.duplicates > 0 && addedProfile == null) {
+                                platform.toast("این کانفیگ از قبل وجود داشت؛ اتصال آن انتخاب شد")
+                            }
+                            onToggleConnection()
+                        } else {
+                            platform.toast(
+                                if (result.duplicates > 0) "کانفیگ تکراری است اما نسخهٔ ذخیره‌شده پیدا نشد؛ اتصال انجام نشد"
+                                else "کانفیگ واردشدنی نبود؛ اتصال انجام نشد",
+                            )
+                            current = TopDestination.Servers
+                        }
+                    }.onFailure {
+                        platform.toast("افزودن کانفیگ ناموفق بود؛ اتصال انجام نشد")
+                    }
+                }
+            },
+        )
     }
 
     val tourSteps = dev.cluvex.zedsecure.ui.onboarding.rememberTourSteps()
