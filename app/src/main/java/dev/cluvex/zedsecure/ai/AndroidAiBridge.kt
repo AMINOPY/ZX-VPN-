@@ -174,7 +174,7 @@ object AndroidAiBridge {
             append(". Only up to five candidates are returned; raw links and credentials are withheld. ")
             append("This is not full-device TUN, UDP/DNS, leak, privacy, or security validation.")
             returned.forEachIndexed { index, candidate ->
-                append("\\n").append(index + 1).append(". id=").append(candidate.id)
+                append("\n").append(index + 1).append(". id=").append(candidate.id)
                 append(" protocol=").append(candidate.protocol)
                 append(" latencyMs=").append(candidate.latencyMs)
                 append(" project=").append(candidate.repository)
@@ -183,13 +183,13 @@ object AndroidAiBridge {
     }
 
     private fun addTestedConfigs(repository: ConfigRepository, idsText: String): String {
-        val ids = idsText.split(',', '\\n').map { it.trim() }.filter { it.isNotBlank() }.distinct().take(MAX_CONFIGS_TO_RETURN)
+        val ids = idsText.split(',', '\n').map { it.trim() }.filter { it.isNotBlank() }.distinct().take(MAX_CONFIGS_TO_RETURN)
         if (ids.isEmpty()) return "No candidate IDs supplied. Nothing was added."
         val now = System.currentTimeMillis()
         val candidates = ids.mapNotNull { id -> testedCandidates[id]?.takeIf { now - it.testedAtMs in 0..CANDIDATE_TTL_MS } }
         if (candidates.isEmpty() || candidates.size != ids.size) return "One or more candidate IDs are missing, expired, or were not successfully tested in this session. Nothing was added."
         val links = candidates.map { it.link }.distinct()
-        val result = repository.importText(links.joinToString("\\n"))
+        val result = repository.importText(links.joinToString("\n"))
         return result.fold(
             onSuccess = { added ->
                 candidates.forEach { testedCandidates.remove(it.id) }
