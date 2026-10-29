@@ -88,7 +88,7 @@ object AndroidAiBridge {
         }
     }
 
-    private suspend fun connect(toggle: () -> Unit) {
+    private suspend fun connect(toggle: () -> Unit): String {
         val before = VpnManager.status.value
         if (before.state.isActive) return "already connected to ${before.serverName ?: "a server"}"
         toggle()
