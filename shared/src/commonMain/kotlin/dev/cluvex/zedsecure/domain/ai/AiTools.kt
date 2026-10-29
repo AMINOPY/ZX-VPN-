@@ -185,7 +185,25 @@ object AiTools {
         ),
     )
 
-    suspend fun run(call: AiToolCall, bridge: AiAppBridge): AiToolResult {
+    private val changingToolNames = setOf(
+        "apply_settings", "set_active_server", "connect", "disconnect",
+        "import_config", "delete_server", "create_server",
+    )
+
+    suspend fun run(
+        call: AiToolCall,
+        bridge: AiAppBridge,
+        allowChanges: Boolean = false,
+    ): AiToolResult {
+        // Enforce read-only mode at the execution boundary, not only by hiding tool schemas.
+        if (!allowChanges && call.name in changingToolNames) {
+            return AiToolResult(
+                call.id,
+                call.name,
+                "blocked: changes are disabled in the assistant settings. No action was performed.",
+                failed = true,
+            )
+        }
         val args = runCatching { aiJson.parseToJsonElement(call.argumentsJson).jsonObject }
             .getOrElse { JsonObject(emptyMap()) }
         fun s(name: String, fallback: String = "") =
