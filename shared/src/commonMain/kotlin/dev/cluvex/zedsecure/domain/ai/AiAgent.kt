@@ -1,5 +1,27 @@
 package dev.cluvex.zedsecure.domain.ai
 
+internal object AiActionConsent {
+fun hasExplicitConsent(
+    history: List<AiTurn>,
+    userMessage: String,
+    topicWords: List<String>,
+    contextWords: List<String>,
+): Boolean {
+    val previousAssistant = history.lastOrNull { it.role == AiRole.ASSISTANT }?.text.orEmpty().lowercase()
+    val previouslyExplained = topicWords.any { it in previousAssistant } &&
+        contextWords.any { it in previousAssistant } &&
+        listOf("?", "؟", "confirm", "permission", "consent", "موافق", "اجازه", "تأیید", "تایید")
+            .any { it in previousAssistant }
+    if (!previouslyExplained) return false
+    val reply = userMessage.trim().lowercase()
+    return listOf("yes", "yes please", "confirm", "confirmed", "go ahead", "do it",
+        "بله", "آره", "موافقم", "تأیید", "تایید", "انجام بده").any {
+        reply == it || reply.startsWith("$it ") || reply.startsWith("$it،")
+    }
+}
+
+}
+
 class AiAgent(
     private val client: AiClient,
     private val bridge: AiAppBridge,
@@ -43,24 +65,6 @@ class AiAgent(
         ).any { phrase -> reply == phrase || reply.startsWith("$phrase ") || reply.startsWith("$phrase،") }
     }
 
-    private fun hasExplicitConsent(
-        history: List<AiTurn>,
-        userMessage: String,
-        topicWords: List<String>,
-        contextWords: List<String>,
-    ): Boolean {
-        val previousAssistant = history.lastOrNull { it.role == AiRole.ASSISTANT }?.text.orEmpty().lowercase()
-        val previouslyExplained = topicWords.any { it in previousAssistant } &&
-            contextWords.any { it in previousAssistant } &&
-            listOf("?", "؟", "confirm", "permission", "consent", "موافق", "اجازه", "تأیید", "تایید")
-                .any { it in previousAssistant }
-        if (!previouslyExplained) return false
-        val reply = userMessage.trim().lowercase()
-        return listOf("yes", "yes please", "confirm", "confirmed", "go ahead", "do it",
-            "بله", "آره", "موافقم", "تأیید", "تایید", "انجام بده").any {
-            reply == it || reply.startsWith("$it ") || reply.startsWith("$it،")
-        }
-    }
 
     suspend fun ask(
         history: List<AiTurn>,
@@ -90,7 +94,7 @@ class AiAgent(
                         val deleteConfirmationMissing = call.name == "delete_server" &&
                             !hasExplicitDeleteConfirmation(history, userMessage)
                         val speedConsentMissing = call.name == "speed_test" &&
-                            !hasExplicitConsent(
+                            !AiActionConsent.hasExplicitConsent(
                                 history + produced,
                                 userMessage,
                                 listOf("speed test", "speed_test", "تست سرعت", "آزمایش سرعت"),
