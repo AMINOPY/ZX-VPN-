@@ -96,9 +96,11 @@ class AiAgent(
                                 listOf("speed test", "speed_test", "تست سرعت", "آزمایش سرعت"),
                                 listOf("data", "allowance", "volume", "حجم", "دیتا", "مصرف"),
                             )
-                        val mtuArguments = call.argumentsJson.replace(" ", "").replace("\\"", "").lowercase()
-                        val mtuChangesTunnel = call.name == "probe_mtu" &&
-                            (mtuArguments.contains("\\\"reconnect\\\":true") || mtuArguments.contains("\\\"apply\\\":true"))
+                        val mtuArguments = call.argumentsJson.lowercase()
+                        val mtuChangesTunnel = call.name == "probe_mtu" && (
+                            (mtuArguments.contains("reconnect") && mtuArguments.substringAfter("reconnect").take(16).contains("true")) ||
+                            (mtuArguments.contains("apply") && mtuArguments.substringAfter("apply").take(16).contains("true"))
+                        )
                         val mtuConsentMissing = mtuChangesTunnel &&
                             !hasExplicitConsent(
                                 history + produced,
