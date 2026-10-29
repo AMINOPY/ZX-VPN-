@@ -17,6 +17,7 @@ import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 
@@ -100,6 +101,52 @@ class AppAiBridge(
 
     override fun networkDiagnostics(): String =
         runCatching { networkReportFn() }.getOrElse { it.message ?: AI_UNSUPPORTED }
+
+    override suspend fun diagnoseConnection(): String {
+        val status = statusJson()
+        val relevantLogs = LogBus.lines.value.asSequence()
+            .filter { line ->
+                val lower = line.lowercase()
+                listOf("error", "exception", "failed", "failure", "timeout", "timed out",
+                    "dns", "handshake", "tls", "route", "unreachable", "refused").any { it in lower }
+            }
+            .takeLast(20)
+            .map { line ->
+                line.replace(Regex("(?i)(vless|vmess|trojan|ss|socks|wireguard|hysteria2)://[^ ]+"), "<redacted config URI>")
+                    .replace(Regex("(?i)(password|token|secret|api[_-]?key|private[_-]?key)\\s*[:=]\\s*[^,\\s]+"), "<redacted secret>")
+                    .take(500)
+            }
+            .toList()
+        val connected = runCatching {
+            json.parseToJsonElement(status).jsonObject["connected"]?.jsonPrimitive?.contentOrNull == "true"
+        }.getOrDefault(false)
+        val exit = if (connected) runCatching { exitInfo() }.getOrElse { "exit info unavailable" }
+            else "not queried: VPN is not connected"
+        return buildJsonObject {
+            put("status", status)
+            put("network", networkDiagnostics())
+            put("relevantLogLines", buildJsonArray { relevantLogs.forEach { add(it) } }.toString())
+            put("exitInfo", exit)
+            put("limitations", "Read-only evidence, not a packet-level DNS/IP leak test. No settings were changed.")
+        }.toString()
+    }
+
+    override suspend fun compareServers(): String {
+        val raw = ping(null)
+        val entries = runCatching { json.parseToJsonElement(raw).jsonArray.toList() }
+            .getOrElse { return raw }
+        val sorted = entries.sortedWith(
+            compareBy<kotlinx.serialization.json.JsonElement> {
+                runCatching {
+                    it.jsonObject["ms"]?.jsonPrimitive?.contentOrNull?.toLongOrNull() ?: Long.MAX_VALUE
+                }.getOrDefault(Long.MAX_VALUE)
+            }.thenBy {
+                runCatching { it.jsonObject["name"]?.jsonPrimitive?.contentOrNull.orEmpty() }
+                    .getOrDefault("")
+            },
+        )
+        return buildJsonArray { sorted.forEach { add(it) } }.toString()
+    }
 
     override suspend fun searchPublicSources(query: String): String =
         if (query.isBlank()) "provide a non-empty search query"
