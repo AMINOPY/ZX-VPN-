@@ -53,7 +53,7 @@ class AiAgent(
 
                     val results = turn.calls.map { call ->
                         onStep(Step.Calling(call.name, call.argumentsJson))
-                        val result = AiTools.run(call, bridge)
+                        val result = AiTools.run(call, bridge, allowChanges)
                         onStep(Step.Called(result))
                         result
                     }
