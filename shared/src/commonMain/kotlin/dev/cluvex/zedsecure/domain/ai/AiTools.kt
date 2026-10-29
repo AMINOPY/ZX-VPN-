@@ -106,7 +106,7 @@ object AiTools {
                 "Reports whether the resolver answered. TCP and DoT are not implemented by this probe; " +
                 "do not claim they were tested.",
             obj(
-                "server" to str("The resolver: an IP for plain DNS, or a URL for DoH, or a hostname for DoT."),
+                "server" to str("The resolver: an IP for plain UDP DNS or a URL for DoH. This build does not probe DoT."),
                 "mode" to str("Supported modes: udp or doh only."),
                 "host" to str("The name to resolve. Default www.google.com."),
                 required = listOf("server", "mode"),
