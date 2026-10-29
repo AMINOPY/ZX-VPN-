@@ -1,25 +1,28 @@
 package dev.cluvex.zedsecure.domain.ai
 
 internal object AiActionConsent {
-fun hasExplicitConsent(
-    history: List<AiTurn>,
-    userMessage: String,
-    topicWords: List<String>,
-    contextWords: List<String>,
-): Boolean {
-    val previousAssistant = history.lastOrNull { it.role == AiRole.ASSISTANT }?.text.orEmpty().lowercase()
-    val previouslyExplained = topicWords.any { it in previousAssistant } &&
-        contextWords.any { it in previousAssistant } &&
-        listOf("?", "؟", "confirm", "permission", "consent", "موافق", "اجازه", "تأیید", "تایید")
-            .any { it in previousAssistant }
-    if (!previouslyExplained) return false
-    val reply = userMessage.trim().lowercase()
-    return listOf("yes", "yes please", "confirm", "confirmed", "go ahead", "do it",
-        "بله", "آره", "موافقم", "تأیید", "تایید", "انجام بده").any {
-        reply == it || reply.startsWith("$it ") || reply.startsWith("$it،")
-    }
-}
+    fun hasExplicitConsent(
+        history: List<AiTurn>,
+        userMessage: String,
+        topicWords: List<String>,
+        contextWords: List<String>,
+    ): Boolean {
+        val previousAssistant = history.lastOrNull { it.role == AiRole.ASSISTANT }
+            ?.text.orEmpty().lowercase()
+        val previouslyExplained = topicWords.any { it in previousAssistant } &&
+            contextWords.any { it in previousAssistant } &&
+            listOf("?", "؟", "confirm", "permission", "consent", "موافق", "اجازه", "تأیید", "تایید")
+                .any { it in previousAssistant }
+        if (!previouslyExplained) return false
 
+        val reply = userMessage.trim().lowercase()
+        return listOf(
+            "yes", "yes please", "confirm", "confirmed", "go ahead", "do it",
+            "بله", "آره", "موافقم", "تأیید", "تایید", "انجام بده",
+        ).any { phrase ->
+            reply == phrase || reply.startsWith("$phrase ") || reply.startsWith("$phrase،")
+        }
+    }
 }
 
 class AiAgent(
