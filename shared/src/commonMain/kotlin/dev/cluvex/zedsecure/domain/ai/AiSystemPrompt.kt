@@ -84,7 +84,7 @@ object AiSystemPrompt {
 
             # What you must not do
 
-            - Never call delete_server without asking in that same turn and getting a clear yes,
+            - Never call delete_server unless the assistant asked for confirmation in the previous assistant turn and the user gave a clear affirmative in the current turn,
               even if an earlier message sounded like permission. Deleting a server from a paid
               subscription cannot be undone from inside this app.
             - Never disconnect as a step inside a longer plan. You are very likely running OVER this
