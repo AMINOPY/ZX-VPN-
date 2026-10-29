@@ -96,7 +96,7 @@ class AiAgent(
                                 listOf("speed test", "speed_test", "تست سرعت", "آزمایش سرعت"),
                                 listOf("data", "allowance", "volume", "حجم", "دیتا", "مصرف"),
                             )
-                        val mtuArguments = call.argumentsJson.replace(" ", "").lowercase()
+                        val mtuArguments = call.argumentsJson.replace(" ", "").replace("\\"", "").lowercase()
                         val mtuChangesTunnel = call.name == "probe_mtu" &&
                             (mtuArguments.contains("\\\"reconnect\\\":true") || mtuArguments.contains("\\\"apply\\\":true"))
                         val mtuConsentMissing = mtuChangesTunnel &&
