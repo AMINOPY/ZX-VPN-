@@ -102,12 +102,12 @@ object AiTools {
         ),
         AiTool(
             "test_dns",
-            "Tests a hostname using the DNS probe modes implemented in this build: udp or doh. " +
-                "Reports whether the resolver answered. TCP and DoT are not implemented by this probe; " +
-                "do not claim they were tested.",
+            "UDP mode only checks whether the resolver responds; it does not query the supplied hostname. " +
+                "DoH mode resolves the supplied hostname and reports the returned addresses. TCP and DoT " +
+                "are not implemented by this probe; do not claim they were tested.",
             obj(
                 "server" to str("The resolver: an IP for plain UDP DNS or a URL for DoH. This build does not probe DoT."),
-                "mode" to str("Supported modes: udp or doh only."),
+                "mode" to str("Supported modes: udp (resolver responsiveness only) or doh (resolve the hostname)."),
                 "host" to str("The name to resolve. Default www.google.com."),
                 required = listOf("server", "mode"),
             ),
