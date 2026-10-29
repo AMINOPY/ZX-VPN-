@@ -44,4 +44,11 @@ interface AiAppBridge {
     suspend fun exitInfo(): String
 }
 
+interface AiVoiceController {
+    fun startListening(onResult: (String) -> Unit, onError: (String) -> Unit)
+    fun stopListening()
+    fun speak(text: String)
+    fun stopSpeaking()
+}
+
 const val AI_UNSUPPORTED = "not available on this platform"
