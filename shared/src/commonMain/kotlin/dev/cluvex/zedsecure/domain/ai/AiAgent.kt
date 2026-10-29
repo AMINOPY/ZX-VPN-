@@ -98,7 +98,7 @@ class AiAgent(
                             )
                         val mtuArguments = call.argumentsJson.replace(" ", "").lowercase()
                         val mtuChangesTunnel = call.name == "probe_mtu" &&
-                            (mtuArguments.contains("\\"reconnect\\":true") || mtuArguments.contains("\\"apply\\":true"))
+                            (mtuArguments.contains("\\\"reconnect\\\":true") || mtuArguments.contains("\\\"apply\\\":true"))
                         val mtuConsentMissing = mtuChangesTunnel &&
                             !hasExplicitConsent(
                                 history + produced,
