@@ -94,7 +94,7 @@ class AppAiBridge(
     override fun logsText(lines: Int): String {
         val all = LogBus.lines.value
         if (all.isEmpty()) return "the log is empty — nothing has been recorded since the app started"
-        return all.takeLast(lines).joinToString("\n")
+        return all.takeLast(lines).joinToString("\n") { redactLogLine(it) }
     }
 
     override fun coreReport(): String = runCatching { coreReportFn() }.getOrElse { it.message ?: AI_UNSUPPORTED }
@@ -112,11 +112,7 @@ class AppAiBridge(
             }
             .toList()
             .takeLast(20)
-            .map { line ->
-                line.replace(Regex("(?i)(vless|vmess|trojan|ss|socks|wireguard|hysteria2)://[^ ]+"), "<redacted config URI>")
-                    .replace(Regex("(?i)(password|token|secret|api[_-]?key|private[_-]?key)\\s*[:=]\\s*[^,\\s]+"), "<redacted secret>")
-                    .take(500)
-            }
+            .map { line -> redactLogLine(line).take(500) }
             .toList()
         val connected = runCatching {
             json.parseToJsonElement(status).jsonObject["connected"]?.jsonPrimitive?.contentOrNull == "true"
@@ -133,21 +129,37 @@ class AppAiBridge(
     }
 
     override suspend fun compareServers(): String {
-        val raw = ping(null)
-        val entries = runCatching { json.parseToJsonElement(raw).jsonArray.toList() }
-            .getOrElse { return raw }
-        val sorted = entries.sortedWith(
-            compareBy<kotlinx.serialization.json.JsonElement> {
-                runCatching {
-                    it.jsonObject["ms"]?.jsonPrimitive?.contentOrNull?.toLongOrNull() ?: Long.MAX_VALUE
-                }.getOrDefault(Long.MAX_VALUE)
-            }.thenBy {
-                runCatching { it.jsonObject["name"]?.jsonPrimitive?.contentOrNull.orEmpty() }
-                    .getOrDefault("")
-            },
+        val allProfiles = repository.profiles.value
+        if (allProfiles.isEmpty()) return "there are no saved servers to compare"
+        // Bound the probe cost so a large subscription cannot trigger an unbounded diagnostic run.
+        val measured = allProfiles.take(30).map { profile ->
+            val latency = runCatching {
+                PingService.realDelay(profile, chainConfig = chainConfig)
+            }.getOrDefault(-1L)
+            buildJsonObject {
+                put("id", profile.id)
+                put("name", profile.name)
+                if (latency > 0) put("latencyMs", latency) else put("failed", true)
+            }
+        }
+        val sorted = measured.sortedWith(
+            compareBy<kotlinx.serialization.json.JsonObject> {
+                it["latencyMs"]?.jsonPrimitive?.contentOrNull?.toLongOrNull() ?: Long.MAX_VALUE
+            }.thenBy { it["name"]?.jsonPrimitive?.contentOrNull.orEmpty() },
         )
-        return buildJsonArray { sorted.forEach { add(it) } }.toString()
+        return buildJsonObject {
+            put("tested", sorted.size)
+            put("totalSaved", allProfiles.size)
+            put("truncated", allProfiles.size > sorted.size)
+            put("results", buildJsonArray { sorted.forEach { add(it) } })
+            put("note", "Latency is a point-in-time probe, not throughput or a guarantee of future availability.")
+        }.toString()
     }
+
+    private fun redactLogLine(line: String): String =
+        line.replace(Regex("(?i)(vless|vmess|trojan|ss|socks|wireguard|hysteria2)://\\\\S+"), "<redacted config URI>")
+            .replace(Regex("(?i)(password|token|secret|api[_-]?key|private[_-]?key)\\\\s*[:=]\\\\s*[^,\\\\s]+"), "<redacted secret>")
+            .replace(Regex("(?i)bearer\\\\s+[^,\\\\s]+"), "Bearer <redacted>")
 
     override suspend fun searchPublicSources(query: String): String =
         if (query.isBlank()) "provide a non-empty search query"
