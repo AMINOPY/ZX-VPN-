@@ -59,6 +59,11 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.contentOrNull
 
 private data class FinderSource(
     val name: String,
@@ -170,6 +175,8 @@ fun ConfigFinderSheet(
     var geoLoading by remember { mutableStateOf(false) }
     var selectedHost by remember { mutableStateOf<String?>(null) }
     var selectedPort by remember { mutableStateOf<Int?>(null) }
+    var healthyResultsPending by remember { mutableStateOf<List<FinderResult>>(emptyList()) }
+    var showHealthyImportPrompt by remember { mutableStateOf(false) }
 
     val displayedResults = remember(
         results, sortMode, protocolFilter, onlyParserSupported, onlyTested, onlyRealDelaySuccess, query, country, category,
@@ -299,7 +306,11 @@ fun ConfigFinderSheet(
                     )
                 val successful = measured.count { (it.realDelayMs ?: -1L) > 0L }
                 val tcpReachable = measured.count { (it.tcpPingMs ?: -1L) > 0L }
-                status = "آزمایش تمام شد: تأخیر واقعی برای $successful از ${measured.size} گزینه اندازه‌گیری شد؛ اتصال TCP برای $tcpReachable گزینه پاسخ داد. ترتیب اصلی بر اساس میانهٔ تأخیر واقعی است و پینگ TCP فقط معیار ثانویه است؛ این عدد سرعت دانلود را نشان نمی‌دهد."
+                healthyResultsPending = measured.filter {
+                    it.parserSupported && it.payload != null && (it.realDelayMs ?: -1L) > 0L
+                }.sortedBy { it.realDelayMs ?: Long.MAX_VALUE }
+                showHealthyImportPrompt = healthyResultsPending.isNotEmpty()
+                status = "آزمایش تمام شد: تأخیر واقعی از مسیر موتور برای $successful از ${measured.size} گزینه اندازه‌گیری شد؛ اتصال TCP برای $tcpReachable گزینه پاسخ داد. فقط گزینه‌های دارای تأخیر واقعی موفق برای پیشنهاد افزودن آماده‌اند؛ این تست پایداری آینده یا عبور کامل همهٔ ترافیک دستگاه را تضمین نمی‌کند."
             } catch (cancelled: kotlinx.coroutines.CancellationException) {
                 status = "آزمایش لغو شد؛ نتایج اندازه‌گیری‌نشده معتبر فرض نمی‌شوند."
                 throw cancelled
@@ -318,13 +329,17 @@ fun ConfigFinderSheet(
         results = emptyList()
         scope.launch {
             val outcome = runCatching {
+                val discoveredGithubSources = if (category == "GitHub" || category == "همه منابع") {
+                    discoverGithubProjectSources()
+                } else emptyList()
                 val sources = when (category) {
-                            "کشوری" -> countrySources.filter { country == "همه کشورها" || it.country == country }
-                            "سرعتی" -> speedSources
-                            "تلگرام" -> telegramSources
-                            "همه منابع" -> countrySources + speedSources + telegramSources
-                            else -> countrySources + speedSources + telegramSources
-                        }
+                    "کشوری" -> countrySources.filter { country == "همه کشورها" || it.country == country }
+                    "سرعتی" -> speedSources
+                    "تلگرام" -> telegramSources
+                    "GitHub" -> discoveredGithubSources
+                    "همه منابع" -> countrySources + speedSources + telegramSources + discoveredGithubSources
+                    else -> countrySources + speedSources + telegramSources
+                }
                 fetchSources(sources)
             }
             outcome.onSuccess { fetched ->
@@ -403,7 +418,7 @@ fun ConfigFinderSheet(
                 }
             }
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                listOf("همه منابع", "کشوری", "سرعتی", "تلگرام").forEach { item ->
+                listOf("همه منابع", "کشوری", "سرعتی", "تلگرام", "GitHub").forEach { item ->
                     FilterChip(selected = category == item, onClick = { category = item }, label = { Text(item) })
                 }
             }
@@ -552,6 +567,48 @@ fun ConfigFinderSheet(
             }
         }
 
+        if (showHealthyImportPrompt && healthyResultsPending.isNotEmpty()) {
+            AlertDialog(
+                onDismissRequest = {
+                    showHealthyImportPrompt = false
+                    healthyResultsPending = emptyList()
+                },
+                title = { Text("${healthyResultsPending.size} کانفیگ پاسخ‌گوی واقعی پیدا شد", fontWeight = FontWeight.Bold) },
+                text = {
+                    Column(
+                        Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text("تست از مسیر موتور پروکسی انجام شده و تأخیر واقعی ثبت شده است. این نتیجه تضمین پایداری آینده یا تست کامل مسیر TUN دستگاه نیست. فقط در صورت تأیید تو، این موارد به فهرست سرورها اضافه می‌شوند.")
+                        healthyResultsPending.take(10).forEach { candidate ->
+                            FinderInfoLine(candidate.name, "${candidate.realDelayMs} ms · ${candidate.protocol}")
+                        }
+                        if (healthyResultsPending.size > 10) {
+                            Text("و ${healthyResultsPending.size - 10} گزینهٔ دیگر…", style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                },
+                confirmButton = {
+                    Button(onClick = {
+                        val links = healthyResultsPending.mapNotNull { it.payload?.takeIf(String::isNotBlank) }.distinct()
+                        showHealthyImportPrompt = false
+                        healthyResultsPending = emptyList()
+                        if (links.isNotEmpty()) {
+                            onImport(links.joinToString("\\n"))
+                            status = "درخواست افزودن ${links.size} کانفیگ تست‌شده به فهرست ارسال شد."
+                        }
+                    }) { Text("بله، به فهرست اضافه کن") }
+                },
+                dismissButton = {
+                    TextButton(onClick = {
+                        showHealthyImportPrompt = false
+                        healthyResultsPending = emptyList()
+                        status = "طبق انتخاب تو، هیچ کانفیگی به فهرست اضافه نشد."
+                    }) { Text("نه، اضافه نکن") }
+                },
+            )
+        }
+
         selectedResult?.let { item ->
             val profile = runCatching { profileForLatencyProbe(item) }.getOrNull()
             AlertDialog(
@@ -688,6 +745,34 @@ private data class FetchSourcesResult(
     val totalSources: Int,
     val failedSourceNames: List<String>,
 )
+
+private suspend fun discoverGithubProjectSources(): List<FinderSource> = withContext(Dispatchers.IO) {
+    val endpoint = "https://api.github.com/search/repositories?q=v2ray+configs+in:description&sort=updated&per_page=8"
+    runCatching {
+        val response = httpGetResponse(
+            endpoint,
+            "ZX-VPN-ConfigFinder/1.0",
+            connectTimeoutMs = 8000,
+            readTimeoutMs = 12000,
+        )
+        if (response.code !in 200..299) return@withContext emptyList()
+        val items = Json.parseToJsonElement(response.body).jsonObject["items"]?.jsonArray ?: return@withContext emptyList()
+        items.mapNotNull { element ->
+            runCatching {
+                val item = element.jsonObject
+                val fullName = item["full_name"]?.jsonPrimitive?.contentOrNull?.takeIf { it.matches(Regex("[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")) }
+                    ?: return@mapNotNull null
+                val branch = item["default_branch"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() } ?: "main"
+                FinderSource(
+                    name = "GitHub · $fullName",
+                    url = "https://raw.githubusercontent.com/$fullName/$branch/README.md",
+                    country = "نامشخص",
+                    category = "GitHub",
+                )
+            }.getOrNull()
+        }.take(8)
+    }.getOrElse { emptyList() }
+}
 
 private suspend fun fetchSources(sources: List<FinderSource>): FetchSourcesResult = coroutineScope {
     val semaphore = Semaphore(4)
