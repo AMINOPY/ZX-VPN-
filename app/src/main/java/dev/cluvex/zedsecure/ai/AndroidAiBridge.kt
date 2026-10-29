@@ -108,7 +108,8 @@ object AndroidAiBridge {
             val fullName = item.optString("full_name").takeIf { it.matches(Regex("[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")) } ?: continue
             val branch = item.optString("default_branch").ifBlank { "main" }
             val rawUrl = "https://raw.githubusercontent.com/$fullName/$branch/README.md"
-            val (_, readme) = runCatching { httpText(rawUrl) }.getOrElse { continue }
+            val readmeResult = runCatching { httpText(rawUrl) }.getOrNull() ?: continue
+            val readme = readmeResult.second
             var count = 0
             for (match in configLinkRegex.findAll(readme)) {
                 if (count >= MAX_CONFIGS_PER_PROJECT) break
