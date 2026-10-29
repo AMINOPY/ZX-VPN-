@@ -28,6 +28,21 @@ class AiAgent(
         data class Failed(val message: String) : Step
     }
 
+    private fun hasExplicitDeleteConfirmation(history: List<AiTurn>, userMessage: String): Boolean {
+        val previousAssistant = history.lastOrNull { it.role == AiRole.ASSISTANT }?.text.orEmpty().lowercase()
+        val askedForDeleteConfirmation =
+            (("delete" in previousAssistant || "remove" in previousAssistant || "حذف" in previousAssistant) &&
+                ("confirm" in previousAssistant || "are you sure" in previousAssistant ||
+                    "yes or no" in previousAssistant || "تأیید" in previousAssistant || "مطمئن" in previousAssistant))
+        if (!askedForDeleteConfirmation) return false
+
+        val reply = userMessage.trim().lowercase()
+        return listOf(
+            "yes", "yes, delete", "confirm", "confirmed", "do it", "go ahead",
+            "بله", "آره", "تأیید", "تایید", "حذف کن", "انجام بده",
+        ).any { phrase -> reply == phrase || reply.startsWith("$phrase ") || reply.startsWith("$phrase،") }
+    }
+
     suspend fun ask(
         history: List<AiTurn>,
         userMessage: String,
@@ -53,7 +68,20 @@ class AiAgent(
 
                     val results = turn.calls.map { call ->
                         onStep(Step.Calling(call.name, call.argumentsJson))
-                        val result = AiTools.run(call, bridge, allowChanges)
+                        val deleteConfirmationMissing = call.name == "delete_server" &&
+                            !hasExplicitDeleteConfirmation(history, userMessage)
+                        val result = if (deleteConfirmationMissing) {
+                            AiToolResult(
+                                call.id,
+                                call.name,
+                                "blocked: deleting a server requires the assistant to ask for confirmation " +
+                                    "in a previous assistant turn and the user to clearly confirm in this turn. " +
+                                    "No server was deleted.",
+                                failed = true,
+                            )
+                        } else {
+                            AiTools.run(call, bridge, allowChanges)
+                        }
                         onStep(Step.Called(result))
                         result
                     }
