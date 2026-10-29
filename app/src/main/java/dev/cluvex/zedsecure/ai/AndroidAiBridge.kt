@@ -17,9 +17,9 @@ import dev.cluvex.zedsecure.domain.config.ConfigParser
 import dev.cluvex.zedsecure.domain.config.SingBoxJson
 import dev.cluvex.zedsecure.domain.config.SingBoxLinks
 import dev.cluvex.zedsecure.domain.config.VpnProfile
-import dev.cluvex.zedsecure.platform.currentTimeMillis
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.flow.first
@@ -44,7 +44,7 @@ object AndroidAiBridge {
     )
 
     private val testedCandidates = java.util.concurrent.ConcurrentHashMap<String, TestedCandidate>()
-    private val configLinkRegex = Regex("""(?i)(?:vless|vmess|trojan|ss|socks5?|http|hysteria2?|hy2|tuic|wireguard|awg|ssh|vpn)://[^\\s"<>]+""")
+    private val configLinkRegex = Regex("""(?i)(?:vless|vmess|trojan|ss|socks5?|http|hysteria2?|hy2|tuic|wireguard|awg|ssh|vpn)://[^\s"<>]+""")
     private const val MAX_GITHUB_PROJECTS = 5
     private const val MAX_CONFIGS_PER_PROJECT = 40
     private const val MAX_CONFIGS_TO_PROBE = 12
@@ -162,14 +162,14 @@ object AndroidAiBridge {
                         }
                     }
                 }
-            }.mapNotNull { it.await() }
+            }.awaitAll().filterNotNull()
         }
         measured.sortedBy { it.latencyMs }.take(MAX_CONFIGS_TO_RETURN).forEach { testedCandidates[it.id] = it }
         val returned = testedCandidates.values.sortedBy { it.latencyMs }.take(requested.coerceIn(1, MAX_CONFIGS_TO_RETURN))
         if (returned.isEmpty()) return@withContext "No candidate passed the real engine latency probe. Nothing was added."
         buildString {
             append("Real engine-probe results; three samples per candidate, median reported. Tested at ")
-            append(java.time.Instant.now().toString())
+            append(System.currentTimeMillis())
             append(". Only up to five candidates are returned; raw links and credentials are withheld. ")
             append("This is not full-device TUN, UDP/DNS, leak, privacy, or security validation.")
             returned.forEachIndexed { index, candidate ->
