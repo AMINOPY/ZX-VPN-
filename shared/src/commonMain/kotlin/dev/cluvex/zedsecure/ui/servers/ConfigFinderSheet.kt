@@ -349,11 +349,12 @@ fun ConfigFinderSheet(
                     // Filters stay live in displayedResults so changing search text or chips never needs another network fetch.
                     // Keep a bounded set of parser-compatible candidates per source to balance coverage and UI/network cost.
                     // This is a syntax/compatibility preference, not a claim that latency or safety was measured.
-                    .groupBy { "${it.source}| ${it.country}" }
+                    .groupBy { it.source }
                     .values
-                    .flatMap { sourceCandidates ->
-                        sourceCandidates.sortedWith(compareByDescending<FinderResult> { candidate -> candidate.parserSupported }
-                            .thenBy { candidate -> candidate.name }).take(20)
+                    .flatMap { projectCandidates ->
+                        // Hard cap: no more than 40 extracted candidates from any one source project.
+                        projectCandidates.sortedWith(compareByDescending<FinderResult> { candidate -> candidate.parserSupported }
+                            .thenBy { candidate -> candidate.name }).take(40)
                     }
                     .groupBy { (it.payload ?: it.rawUrl ?: it.id).trim() }
                     .values
@@ -370,9 +371,9 @@ fun ConfigFinderSheet(
                     results.isEmpty() ->
                         "نتیجه‌ای پیدا نشد؛ کشور یا دستهٔ دیگری را امتحان کن. منابع ناموفق: ${fetched.failedSources} از ${fetched.totalSources}.$failedSourceSummary"
                     fetched.failedSources > 0 ->
-                        "تعداد گزینه‌ها: ${results.size} — ${fetched.failedSources} از ${fetched.totalSources} منبع پاسخ نداد؛ نتیجه ناقص است. حداکثر ۲۰ گزینه از هر فهرست؛ سرعت واقعی تضمین نشده است.$failedSourceSummary"
+                        "تعداد گزینه‌ها: ${results.size} — ${fetched.failedSources} از ${fetched.totalSources} منبع پاسخ نداد؛ نتیجه ناقص است. حداکثر ۴۰ گزینه از هر پروژه؛ سرعت واقعی تضمین نشده است.$failedSourceSummary"
                     else ->
-                        "تعداد گزینه‌ها: ${results.size} — همهٔ ${fetched.totalSources} منبع پاسخ دادند؛ حداکثر ۲۰ گزینه از هر فهرست. سالم‌بودن و سرعت واقعی هنوز با اتصال تست نشده است."
+                        "تعداد گزینه‌ها: ${results.size} — همهٔ ${fetched.totalSources} منبع پاسخ دادند؛ حداکثر ۴۰ گزینه از هر پروژه. سالم‌بودن و سرعت واقعی هنوز با اتصال تست نشده است."
                 }
             }.onFailure {
                 error = it.message?.take(240) ?: "خواندن منابع ناموفق بود."
