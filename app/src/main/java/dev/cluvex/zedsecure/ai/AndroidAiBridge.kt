@@ -13,6 +13,12 @@ import dev.cluvex.zedsecure.data.settings.SettingsRepository
 import dev.cluvex.zedsecure.domain.ai.AppAiBridge
 import dev.cluvex.zedsecure.data.net.DohProbe
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.net.HttpURLConnection
+import java.net.URL
+import java.net.URLEncoder
+import org.json.JSONObject
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -30,6 +36,7 @@ object AndroidAiBridge {
         writeSettings = { next -> settings.update { next } },
         coreReportFn = { XrayController.runtimeReport(14) },
         networkReportFn = { dev.cluvex.zedsecure.core.NetworkDiagnostics.createReport(context) },
+        searchPublicSourcesFn = { query -> searchPublicSources(query) },
         connectFn = { connect(toggleConnection) },
         disconnectFn = { disconnect(toggleConnection) },
         speedTestFn = { speedTest() },
@@ -38,7 +45,50 @@ object AndroidAiBridge {
         mtuHintFn = mtuHint,
     )
 
-    private suspend fun connect(toggle: () -> Unit): String {
+    private suspend fun searchPublicSources(query: String): String = withContext(Dispatchers.IO) {
+        val encoded = URLEncoder.encode(query.take(160), "UTF-8")
+        val connection = (URL("https://api.github.com/search/repositories?q=$encoded&sort=updated&per_page=5")
+            .openConnection() as HttpURLConnection).apply {
+            requestMethod = "GET"
+            connectTimeout = 6_000
+            readTimeout = 6_000
+            setRequestProperty("Accept", "application/vnd.github+json")
+            setRequestProperty("User-Agent", "ZX-VPN-AI-Assistant")
+        }
+        try {
+            val code = connection.responseCode
+            val stream = if (code in 200..299) connection.inputStream else connection.errorStream
+            val body = stream?.bufferedReader()?.use { it.readText().take(120_000) }.orEmpty()
+            if (code !in 200..299) {
+                return@withContext when (code) {
+                    403, 429 -> "GitHub rate limit reached; try again later."
+                    else -> "GitHub search failed with HTTP $code."
+                }
+            }
+            val root = JSONObject(body)
+            val items = root.optJSONArray("items")
+                ?: return@withContext "GitHub returned no repository results."
+            if (items.length() == 0) return@withContext "No public repositories matched this query."
+            buildString {
+                append("Public GitHub repository metadata only; not a security or IP validation. ")
+                for (i in 0 until minOf(items.length(), 5)) {
+                    val item = items.optJSONObject(i) ?: continue
+                    val name = item.optString("full_name", "unknown")
+                    val description = item.optString("description", "").take(240)
+                    val url = item.optString("html_url", "")
+                    val stars = item.optInt("stargazers_count", 0)
+                    val updated = item.optString("updated_at", "")
+                    append("\n- ").append(name).append(" (stars=").append(stars)
+                    append(", updated=").append(updated).append("): ").append(description)
+                    append(" — ").append(url)
+                }
+            }
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    private suspend fun connect(toggle: () -> Unit) {
         val before = VpnManager.status.value
         if (before.state.isActive) return "already connected to ${before.serverName ?: "a server"}"
         toggle()
