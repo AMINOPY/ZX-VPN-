@@ -28,6 +28,8 @@ class AiToolsPermissionTest {
             "read_logs",
             "core_report",
             "network_diagnostics",
+            "diagnose_connection",
+            "compare_servers",
             "search_public_sources",
             "ping",
             "test_dns",
