@@ -19,6 +19,10 @@ interface AiAppBridge {
 
     suspend fun searchPublicSources(query: String): String
 
+    suspend fun findWorkingConfigs(query: String, maxResults: Int): String
+
+    suspend fun addTestedConfigs(candidateIds: String): String
+
     fun appMapJson(): String
 
     fun applySettings(patchJson: String): String
