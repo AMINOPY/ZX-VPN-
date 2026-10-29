@@ -61,6 +61,11 @@ object AiTools {
             OBJ,
         ),
         AiTool(
+            "search_public_sources",
+            "Search public GitHub repository metadata for relevant projects. This does not search code contents, validate any IP, or prove a server is safe or working. Treat results as leads only; never claim an IP is clean without a real, authorized test.",
+            obj("query" to str("Short topic/query to find public repositories, e.g. public DNS benchmark or proxy configuration sources."), required = listOf("query")),
+        ),
+        AiTool(
             "list_protocols",
             "Every engine this build can create directly, with the fields each one takes and which " +
                 "are required. Read it before create_server rather than assuming a field name.",
@@ -219,6 +224,7 @@ object AiTools {
                 "read_logs" -> bridge.logsText(i("lines", 120).coerceIn(20, 500))
                 "core_report" -> bridge.coreReport()
                 "network_diagnostics" -> bridge.networkDiagnostics()
+                "search_public_sources" -> bridge.searchPublicSources(s("query"))
                 "app_map" -> bridge.appMapJson()
                 "list_protocols" -> bridge.protocolsJson()
                 "ping" -> bridge.ping(s("id").takeIf { it.isNotBlank() })
