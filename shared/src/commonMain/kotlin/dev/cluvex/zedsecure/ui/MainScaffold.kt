@@ -77,6 +77,7 @@ fun MainScaffold(
     onLanguage: (AppLanguage) -> Unit,
 
     aiBridge: dev.cluvex.zedsecure.domain.ai.AiAppBridge? = null,
+    aiVoiceController: dev.cluvex.zedsecure.domain.ai.AiVoiceController? = null,
     appVersion: String = "",
 ) {
     val platform = dev.cluvex.zedsecure.ui.platform.LocalPlatform.current
@@ -316,6 +317,7 @@ fun MainScaffold(
                             settings = settings.ai,
                             onUpdate = { next -> onUpdateSettings { it.copy(ai = next) } },
                             bridge = bridge,
+                            voiceController = aiVoiceController,
                             onOpenUrl = { url -> platform.openUri(url) },
 
                             languageName = languageEnglishName(settings.language),
