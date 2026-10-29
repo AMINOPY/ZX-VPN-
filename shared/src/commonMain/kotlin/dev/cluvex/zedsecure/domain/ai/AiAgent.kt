@@ -110,7 +110,7 @@ class AiAgent(
                                 history,
                                 userMessage,
                                 listOf("mtu", "probe_mtu", "ام‌تی‌یو"),
-                                listOf("15 seconds", "fifteen seconds", "pause", "قطع", "reconnect", "تنظیم"),
+                                listOf("15 seconds", "fifteen seconds", "۱۵ ثانیه", "pause", "قطع", "reconnect", "اتصال مجدد", "تنظیم"),
                             )
                         val result = when {
                             deleteConfirmationMissing -> AiToolResult(
