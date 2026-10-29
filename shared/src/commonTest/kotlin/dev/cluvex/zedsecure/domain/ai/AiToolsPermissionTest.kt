@@ -38,8 +38,11 @@ class AiToolsPermissionTest {
     }
 
     @Test
-    fun mtuProbeIsReadOnlyOnlyWhenItDoesNotReconnectOrApply() {
-        assertFalse(AiTools.isBlockedByReadOnly("probe_mtu", allowChanges = false))
+    fun mtuMeasurementCanBeReadOnlyButReconnectAndApplyCannot() {
+        assertFalse(AiTools.isBlockedByPermission("probe_mtu", "{}", allowChanges = false))
+        assertTrue(AiTools.isBlockedByPermission("probe_mtu", """{"reconnect":true}""", allowChanges = false))
+        assertTrue(AiTools.isBlockedByPermission("probe_mtu", """{"apply":true}""", allowChanges = false))
+        assertFalse(AiTools.isBlockedByPermission("probe_mtu", """{"apply":true}""", allowChanges = true))
     }
 
     @Test
