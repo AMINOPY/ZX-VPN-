@@ -12,6 +12,16 @@ import dev.cluvex.zedsecure.data.net.SpeedTestEngine
 import dev.cluvex.zedsecure.data.settings.SettingsRepository
 import dev.cluvex.zedsecure.domain.ai.AppAiBridge
 import dev.cluvex.zedsecure.data.net.DohProbe
+import dev.cluvex.zedsecure.data.net.PingService
+import dev.cluvex.zedsecure.domain.config.ConfigParser
+import dev.cluvex.zedsecure.domain.config.SingBoxJson
+import dev.cluvex.zedsecure.domain.config.SingBoxLinks
+import dev.cluvex.zedsecure.domain.config.VpnProfile
+import dev.cluvex.zedsecure.platform.currentTimeMillis
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -24,6 +34,23 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
 object AndroidAiBridge {
+    private data class TestedCandidate(
+        val id: String,
+        val link: String,
+        val protocol: String,
+        val repository: String,
+        val latencyMs: Long,
+        val testedAtMs: Long,
+    )
+
+    private val testedCandidates = java.util.concurrent.ConcurrentHashMap<String, TestedCandidate>()
+    private val configLinkRegex = Regex("""(?i)(?:vless|vmess|trojan|ss|socks5?|http|hysteria2?|hy2|tuic|wireguard|awg|ssh|vpn)://[^\\s"<>]+""")
+    private const val MAX_GITHUB_PROJECTS = 5
+    private const val MAX_CONFIGS_PER_PROJECT = 40
+    private const val MAX_CONFIGS_TO_PROBE = 12
+    private const val MAX_CONFIGS_TO_RETURN = 5
+    private const val CANDIDATE_TTL_MS = 30 * 60 * 1000L
+
     fun create(
         context: Context,
         repository: ConfigRepository,
@@ -37,6 +64,8 @@ object AndroidAiBridge {
         coreReportFn = { XrayController.runtimeReport(14) },
         networkReportFn = { dev.cluvex.zedsecure.core.NetworkDiagnostics.createReport(context) },
         searchPublicSourcesFn = { query -> searchPublicSources(query) },
+        findWorkingConfigsFn = { query, maxResults -> findWorkingConfigs(query, maxResults) },
+        addTestedConfigsFn = { ids -> addTestedConfigs(repository, ids) },
         connectFn = { connect(toggleConnection) },
         disconnectFn = { disconnect(toggleConnection) },
         speedTestFn = { speedTest() },
@@ -44,6 +73,130 @@ object AndroidAiBridge {
         exitInfoFn = { exitInfo() },
         mtuHintFn = mtuHint,
     )
+
+    private fun httpText(url: String, timeoutMs: Int = 8_000): Pair<Int, String> {
+        val connection = (URL(url).openConnection() as HttpURLConnection).apply {
+            requestMethod = "GET"
+            connectTimeout = timeoutMs
+            readTimeout = timeoutMs
+            setRequestProperty("Accept", "application/vnd.github+json")
+            setRequestProperty("User-Agent", "ZX-VPN-AI-Assistant")
+        }
+        return try {
+            val code = connection.responseCode
+            val stream = if (code in 200..299) connection.inputStream else connection.errorStream
+            code to (stream?.bufferedReader()?.use { it.readText().take(512 * 1024) }.orEmpty())
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    private suspend fun findWorkingConfigs(query: String, requested: Int): String = withContext(Dispatchers.IO) {
+        testedCandidates.clear()
+        val q = query.trim().take(100).ifBlank { "v2ray configs" }
+        val encoded = URLEncoder.encode("$q in:description", "UTF-8")
+        val (code, body) = runCatching {
+            httpText("https://api.github.com/search/repositories?q=$encoded&sort=updated&per_page=$MAX_GITHUB_PROJECTS")
+        }.getOrElse { return@withContext "GitHub repository discovery failed: ${it.message ?: "network error"}" }
+        if (code == 403 || code == 429) return@withContext "GitHub rate limit reached. No candidates were tested."
+        if (code !in 200..299) return@withContext "GitHub repository search failed with HTTP $code."
+        val items = runCatching { JSONObject(body).optJSONArray("items") }.getOrNull()
+            ?: return@withContext "GitHub returned an invalid repository response."
+        val discovered = linkedMapOf<String, Pair<String, String>>()
+        for (i in 0 until minOf(items.length(), MAX_GITHUB_PROJECTS)) {
+            val item = items.optJSONObject(i) ?: continue
+            val fullName = item.optString("full_name").takeIf { it.matches(Regex("[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")) } ?: continue
+            val branch = item.optString("default_branch").ifBlank { "main" }
+            val rawUrl = "https://raw.githubusercontent.com/$fullName/$branch/README.md"
+            val (_, readme) = runCatching { httpText(rawUrl) }.getOrElse { continue }
+            var count = 0
+            for (match in configLinkRegex.findAll(readme)) {
+                if (count >= MAX_CONFIGS_PER_PROJECT) break
+                val link = match.value.trimEnd(',', ';', '.', ')', ']', '}')
+                val supported = runCatching { ConfigParser.isSupportedLink(link) || SingBoxLinks.handles(link) }.getOrDefault(false)
+                if (!supported) continue
+                val id = "gh-" + fullName.hashCode().toUInt().toString(16) + "-" + link.hashCode().toUInt().toString(16)
+                discovered.putIfAbsent(id, link to fullName)
+                count++
+            }
+        }
+        if (discovered.isEmpty()) return@withContext "No parser-supported configuration links were found in the README files of up to $MAX_GITHUB_PROJECTS public projects."
+        val candidates = discovered.entries.take(MAX_CONFIGS_TO_PROBE)
+        val permits = Semaphore(3)
+        val measured = coroutineScope {
+            candidates.map { (id, pair) ->
+                async {
+                    permits.withPermit {
+                        val (link, project) = pair
+                        val profile = runCatching {
+                            if (SingBoxLinks.handles(link)) {
+                                val parsed = SingBoxLinks.parse(link)
+                                val server = SingBoxJson.servers(parsed.fragment).firstOrNull()
+                                    ?: throw IllegalArgumentException("no sing-box outbound")
+                                VpnProfile.fromSingBox(server, id, 0L, name = project.substringAfter('/') + " candidate", link = link)
+                            } else {
+                                val parsed = ConfigParser.parse(link)
+                                VpnProfile(
+                                    id = id,
+                                    name = project.substringAfter('/') + " candidate",
+                                    protocol = parsed.protocol.id.uppercase(),
+                                    address = parsed.address,
+                                    port = parsed.port,
+                                    transportLabel = parsed.transportLabel,
+                                    source = dev.cluvex.zedsecure.domain.config.ProfileSource.Link(link),
+                                    addedAt = 0L,
+                                )
+                            }
+                        }.getOrNull() ?: return@withPermit null
+                        val samples = mutableListOf<Long>()
+                        repeat(3) {
+                            val delay = kotlinx.coroutines.withTimeoutOrNull(9_000L) {
+                                PingService.realDelay(profile)
+                            } ?: -1L
+                            if (delay > 0L) samples += delay
+                        }
+                        if (samples.isEmpty()) null else {
+                            val sorted = samples.sorted()
+                            val median = sorted[sorted.size / 2]
+                            TestedCandidate(id, link, profile.protocol, project, median, System.currentTimeMillis())
+                        }
+                    }
+                }
+            }.mapNotNull { it.await() }
+        }
+        measured.sortedBy { it.latencyMs }.take(MAX_CONFIGS_TO_RETURN).forEach { testedCandidates[it.id] = it }
+        val returned = testedCandidates.values.sortedBy { it.latencyMs }.take(requested.coerceIn(1, MAX_CONFIGS_TO_RETURN))
+        if (returned.isEmpty()) return@withContext "No candidate passed the real engine latency probe. Nothing was added."
+        buildString {
+            append("Real engine-probe results; three samples per candidate, median reported. Tested at ")
+            append(java.time.Instant.now().toString())
+            append(". Only up to five candidates are returned; raw links and credentials are withheld. ")
+            append("This is not full-device TUN, UDP/DNS, leak, privacy, or security validation.")
+            returned.forEachIndexed { index, candidate ->
+                append("\\n").append(index + 1).append(". id=").append(candidate.id)
+                append(" protocol=").append(candidate.protocol)
+                append(" latencyMs=").append(candidate.latencyMs)
+                append(" project=").append(candidate.repository)
+            }
+        }
+    }
+
+    private fun addTestedConfigs(repository: ConfigRepository, idsText: String): String {
+        val ids = idsText.split(',', '\\n').map { it.trim() }.filter { it.isNotBlank() }.distinct().take(MAX_CONFIGS_TO_RETURN)
+        if (ids.isEmpty()) return "No candidate IDs supplied. Nothing was added."
+        val now = System.currentTimeMillis()
+        val candidates = ids.mapNotNull { id -> testedCandidates[id]?.takeIf { now - it.testedAtMs in 0..CANDIDATE_TTL_MS } }
+        if (candidates.isEmpty() || candidates.size != ids.size) return "One or more candidate IDs are missing, expired, or were not successfully tested in this session. Nothing was added."
+        val links = candidates.map { it.link }.distinct()
+        val result = repository.importText(links.joinToString("\\n"))
+        return result.fold(
+            onSuccess = { added ->
+                candidates.forEach { testedCandidates.remove(it.id) }
+                "Added $added tested configuration(s) to the server list. They were measured at the time shown by the discovery result; future availability is not guaranteed."
+            },
+            onFailure = { "Import failed; no tested configuration was confirmed as added: ${it.message ?: "invalid config"}" },
+        )
+    }
 
     private suspend fun searchPublicSources(query: String): String = withContext(Dispatchers.IO) {
         val encoded = URLEncoder.encode(query.take(160), "UTF-8")
