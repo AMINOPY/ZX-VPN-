@@ -13,6 +13,10 @@ interface AiAppBridge {
 
     fun networkDiagnostics(): String
 
+    suspend fun diagnoseConnection(): String
+
+    suspend fun compareServers(): String
+
     suspend fun searchPublicSources(query: String): String
 
     fun appMapJson(): String
