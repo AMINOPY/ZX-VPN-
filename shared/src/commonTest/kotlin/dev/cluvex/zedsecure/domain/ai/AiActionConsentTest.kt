@@ -36,5 +36,17 @@ class AiActionConsentTest {
     fun unrelatedPreviousQuestionDoesNotAuthorizeSpeedTest() {
         val history = listOf(AiTurn(AiRole.ASSISTANT, "Do you want me to check the network status?"))
         assertFalse(AiActionConsent.hasExplicitConsent(history, "yes", speedTopics, dataContext))
+    } 
+    @Test
+    fun testedConfigImportNeedsExplicitPriorQuestionAndAffirmativeReply() {
+        val previous = listOf(
+            AiTurn(AiRole.ASSISTANT, "I tested these configurations. Do you want me to add them to your server list?"),
+        )
+        val topics = listOf("tested configurations", "tested configs")
+        val context = listOf("server list", "add")
+        assertTrue(AiActionConsent.hasExplicitConsent(previous, "yes, add them", topics, context))
+        assertFalse(AiActionConsent.hasExplicitConsent(previous, "no, do not add", topics, context))
+        assertFalse(AiActionConsent.hasExplicitConsent(emptyList(), "yes", topics, context))
     }
+
 }
