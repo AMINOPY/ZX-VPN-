@@ -308,9 +308,9 @@ fun ConfigFinderSheet(
                 val tcpReachable = measured.count { (it.tcpPingMs ?: -1L) > 0L }
                 healthyResultsPending = measured.filter {
                     it.parserSupported && it.payload != null && (it.realDelayMs ?: -1L) > 0L
-                }.sortedBy { it.realDelayMs ?: Long.MAX_VALUE }
+                }.sortedBy { it.realDelayMs ?: Long.MAX_VALUE }.take(5)
                 showHealthyImportPrompt = healthyResultsPending.isNotEmpty()
-                status = "آزمایش تمام شد: تأخیر واقعی از مسیر موتور برای $successful از ${measured.size} گزینه اندازه‌گیری شد؛ اتصال TCP برای $tcpReachable گزینه پاسخ داد. فقط گزینه‌های دارای تأخیر واقعی موفق برای پیشنهاد افزودن آماده‌اند؛ این تست پایداری آینده یا عبور کامل همهٔ ترافیک دستگاه را تضمین نمی‌کند."
+                status = "آزمایش تمام شد: تأخیر واقعی از مسیر موتور برای $successful از ${measured.size} گزینه اندازه‌گیری شد؛ اتصال TCP برای $tcpReachable گزینه پاسخ داد. فقط ۵ گزینهٔ برترِ دارای تأخیر واقعی موفق برای پیشنهاد افزودن آماده‌اند؛ این تست پایداری آینده یا عبور کامل همهٔ ترافیک دستگاه را تضمین نمی‌کند."
             } catch (cancelled: kotlinx.coroutines.CancellationException) {
                 status = "آزمایش لغو شد؛ نتایج اندازه‌گیری‌نشده معتبر فرض نمی‌شوند."
                 throw cancelled
