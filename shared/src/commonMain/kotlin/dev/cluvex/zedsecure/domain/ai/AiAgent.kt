@@ -16,6 +16,9 @@ internal object AiActionConsent {
         if (!previouslyExplained) return false
 
         val reply = userMessage.trim().lowercase()
+        if (listOf("no", "nope", "don't", "do not", "not now", "cancel", "نه", "خیر", "نکن", "اضافه نکن").any { it in reply }) {
+            return false
+        }
         return listOf(
             "yes", "yes please", "confirm", "confirmed", "go ahead", "do it",
             "بله", "آره", "موافقم", "تأیید", "تایید", "انجام بده",
@@ -115,6 +118,13 @@ class AiAgent(
                                 listOf("mtu", "probe_mtu", "ام‌تی‌یو"),
                                 listOf("15 seconds", "fifteen seconds", "۱۵ ثانیه", "pause", "قطع", "reconnect", "اتصال مجدد", "تنظیم"),
                             )
+                        val addConfigsConsentMissing = call.name == "add_tested_configs" &&
+                            !AiActionConsent.hasExplicitConsent(
+                                history,
+                                userMessage,
+                                listOf("tested configurations", "tested configs", "کانفیگ‌های آزمایش‌شده", "کانفیگ های تست‌شده", "سرورهای آزمایش‌شده"),
+                                listOf("server list", "add", "فهرست سرورها", "اضافه", "افزودن"),
+                            )
                         val result = when {
                             deleteConfirmationMissing -> AiToolResult(
                                 call.id, call.name,
@@ -129,6 +139,11 @@ class AiAgent(
                             mtuConsentMissing -> AiToolResult(
                                 call.id, call.name,
                                 "blocked: reconnecting the tunnel or applying an MTU requires an explanation and explicit confirmation in a separate turn. No action was performed.",
+                                failed = true,
+                            )
+                            addConfigsConsentMissing -> AiToolResult(
+                                call.id, call.name,
+                                "blocked: adding tested configurations requires asking in a previous assistant turn and a clear affirmative in this turn. No server was added.",
                                 failed = true,
                             )
                             else -> AiTools.run(call, bridge, allowChanges)
