@@ -208,31 +208,31 @@ object AiTools {
     fun isBlockedByReadOnly(toolName: String, allowChanges: Boolean): Boolean =
         !allowChanges && toolName in changingToolNames
 
+    fun isBlockedByPermission(toolName: String, argumentsJson: String, allowChanges: Boolean): Boolean {
+        if (isBlockedByReadOnly(toolName, allowChanges)) return true
+        if (toolName != "probe_mtu" || allowChanges) return false
+        val args = runCatching { aiJson.parseToJsonElement(argumentsJson).jsonObject }
+            .getOrElse { JsonObject(emptyMap()) }
+        return listOf("reconnect", "apply").any { key ->
+            args[key]?.jsonPrimitive?.contentOrNull.toBoolean()
+        }
+    }
+
     suspend fun run(
         call: AiToolCall,
         bridge: AiAppBridge,
         allowChanges: Boolean = false,
     ): AiToolResult {
-        // Enforce read-only mode at the execution boundary, not only by hiding tool schemas.
-        if (isBlockedByReadOnly(call.name, allowChanges)) {
-            return AiToolResult(
-                call.id,
-                call.name,
-                "blocked: changes are disabled in the assistant settings. No action was performed.",
-                failed = true,
-            )
-        }
         val args = runCatching { aiJson.parseToJsonElement(call.argumentsJson).jsonObject }
             .getOrElse { JsonObject(emptyMap()) }
-        fun argBoolean(name: String) = args[name]?.jsonPrimitive?.contentOrNull.toBoolean()
-        if (call.name == "probe_mtu" && !allowChanges &&
-            (argBoolean("reconnect") || argBoolean("apply"))
-        ) {
-            return AiToolResult(
-                call.id, call.name,
-                "blocked: reconnecting the VPN or applying an MTU changes app state. Enable assistant changes first; no action was performed.",
-                failed = true,
-            )
+        // Enforce permissions at execution time, including side-effecting arguments of mixed tools.
+        if (isBlockedByPermission(call.name, call.argumentsJson, allowChanges)) {
+            val reason = if (call.name == "probe_mtu") {
+                "blocked: reconnecting the VPN or applying an MTU changes app state. Enable assistant changes first; no action was performed."
+            } else {
+                "blocked: changes are disabled in the assistant settings. No action was performed."
+            }
+            return AiToolResult(call.id, call.name, reason, failed = true)
         }
         fun s(name: String, fallback: String = "") =
             args[name]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() } ?: fallback
