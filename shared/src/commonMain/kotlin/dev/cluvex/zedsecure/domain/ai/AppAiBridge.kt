@@ -110,6 +110,7 @@ class AppAiBridge(
                 listOf("error", "exception", "failed", "failure", "timeout", "timed out",
                     "dns", "handshake", "tls", "route", "unreachable", "refused").any { it in lower }
             }
+            .toList()
             .takeLast(20)
             .map { line ->
                 line.replace(Regex("(?i)(vless|vmess|trojan|ss|socks|wireguard|hysteria2)://[^ ]+"), "<redacted config URI>")
