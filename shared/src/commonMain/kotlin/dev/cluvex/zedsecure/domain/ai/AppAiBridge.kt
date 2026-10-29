@@ -27,6 +27,7 @@ class AppAiBridge(
 
     private val coreReportFn: () -> String = { AI_UNSUPPORTED },
     private val networkReportFn: () -> String = { AI_UNSUPPORTED },
+    private val searchPublicSourcesFn: suspend (String) -> String = { AI_UNSUPPORTED },
     private val connectFn: suspend () -> String = { AI_UNSUPPORTED },
     private val disconnectFn: suspend () -> String = { AI_UNSUPPORTED },
     private val speedTestFn: suspend () -> String = { AI_UNSUPPORTED },
@@ -99,6 +100,10 @@ class AppAiBridge(
 
     override fun networkDiagnostics(): String =
         runCatching { networkReportFn() }.getOrElse { it.message ?: AI_UNSUPPORTED }
+
+    override suspend fun searchPublicSources(query: String): String =
+        if (query.isBlank()) "provide a non-empty search query"
+        else runCatching { searchPublicSourcesFn(query.take(160)) }.getOrElse { it.message ?: AI_UNSUPPORTED }
 
     override fun appMapJson(): String = APP_MAP
 
