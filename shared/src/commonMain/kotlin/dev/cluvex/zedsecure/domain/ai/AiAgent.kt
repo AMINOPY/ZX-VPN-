@@ -23,7 +23,7 @@ internal object AiActionConsent {
             "yes", "yes please", "confirm", "confirmed", "go ahead", "do it",
             "بله", "آره", "موافقم", "تأیید", "تایید", "انجام بده",
         ).any { phrase ->
-            reply == phrase || reply.startsWith("$phrase ") || reply.startsWith("$phrase،")
+            reply == phrase || reply.startsWith("$phrase ") || reply.startsWith("$phrase,") || reply.startsWith("$phrase،")
         }
     }
 }
