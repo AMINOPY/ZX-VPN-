@@ -76,6 +76,14 @@ object AiTools {
             obj("query" to str("Short topic/query to find public repositories, e.g. public DNS benchmark or proxy configuration sources."), required = listOf("query")),
         ),
         AiTool(
+            "find_working_configs",
+            "Search public GitHub config-project READMEs, keep only links the app parser recognizes, then test up to 12 candidates using the real engine latency probe (three samples, median). This can take time and uses network traffic. Returns only tested candidate IDs, protocol labels and measured latency, never raw credentials/links to the AI provider. A successful probe is point-in-time evidence, not a full-device TUN, DNS/IP leak, privacy or security guarantee. Does not add anything to the server list.",
+            obj(
+                "query" to str("Optional search phrase such as country or protocol; keep short."),
+                "maxResults" to int("Maximum number of successful tested candidates to return, 1-5; default 5."),
+            ),
+        ),
+        AiTool(
             "list_protocols",
             "Every engine this build can create directly, with the fields each one takes and which " +
                 "are required. Read it before create_server rather than assuming a field name.",
@@ -168,6 +176,11 @@ object AiTools {
             destructive = true,
         ),
         AiTool(
+            "add_tested_configs",
+            "Adds only previously measured-success candidates returned by find_working_configs. Call only after asking in a previous assistant turn whether to add the tested configurations and receiving an explicit affirmative in the current user turn. Use the candidate IDs exactly as returned. A no/unclear answer must add nothing.",
+            obj("candidate_ids" to str("Comma-separated candidate IDs from the most recent find_working_configs result; choose at most 5."), required = listOf("candidate_ids")),
+        ),
+        AiTool(
             "import_config",
             "Imports a config the user pasted: a share link (vless://, vmess://, trojan://, ss://, " +
                 "wireguard, vpn:// …), a subscription URL, or the text of a .conf/.ovpn/JSON file. " +
@@ -202,7 +215,7 @@ object AiTools {
 
     private val changingToolNames = setOf(
         "apply_settings", "set_active_server", "connect", "disconnect",
-        "import_config", "delete_server", "create_server",
+        "import_config", "add_tested_configs", "delete_server", "create_server",
     )
 
     fun isBlockedByReadOnly(toolName: String, allowChanges: Boolean): Boolean =
@@ -250,6 +263,8 @@ object AiTools {
                 "diagnose_connection" -> bridge.diagnoseConnection()
                 "compare_servers" -> bridge.compareServers()
                 "search_public_sources" -> bridge.searchPublicSources(s("query"))
+                "find_working_configs" -> bridge.findWorkingConfigs(s("query"), i("maxResults", 5).coerceIn(1, 5))
+                "add_tested_configs" -> bridge.addTestedConfigs(s("candidate_ids"))
                 "app_map" -> bridge.appMapJson()
                 "list_protocols" -> bridge.protocolsJson()
                 "ping" -> bridge.ping(s("id").takeIf { it.isNotBlank() })
