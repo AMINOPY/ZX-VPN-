@@ -224,6 +224,16 @@ object AiTools {
         }
         val args = runCatching { aiJson.parseToJsonElement(call.argumentsJson).jsonObject }
             .getOrElse { JsonObject(emptyMap()) }
+        fun argBoolean(name: String) = args[name]?.jsonPrimitive?.contentOrNull.toBoolean()
+        if (call.name == "probe_mtu" && !allowChanges &&
+            (argBoolean("reconnect") || argBoolean("apply"))
+        ) {
+            return AiToolResult(
+                call.id, call.name,
+                "blocked: reconnecting the VPN or applying an MTU changes app state. Enable assistant changes first; no action was performed.",
+                failed = true,
+            )
+        }
         fun s(name: String, fallback: String = "") =
             args[name]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() } ?: fallback
         fun i(name: String, fallback: Int) = args[name]?.jsonPrimitive?.intOrNull ?: fallback
