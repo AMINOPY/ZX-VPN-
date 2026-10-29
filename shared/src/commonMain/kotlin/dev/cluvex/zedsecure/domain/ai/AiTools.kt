@@ -56,6 +56,16 @@ object AiTools {
             OBJ,
         ),
         AiTool(
+            "diagnose_connection",
+            "Run a read-only connection diagnosis using current VPN state, local network metadata, relevant error logs and (only when connected) observed exit IP/country. It never changes settings and is not a packet-level leak test.",
+            OBJ,
+        ),
+        AiTool(
+            "compare_servers",
+            "Measure real latency for saved servers and return results ordered from lowest measured latency to failures. This performs real connection probes and may take several seconds per server; it does not connect the VPN or guarantee throughput.",
+            OBJ,
+        ),
+        AiTool(
             "network_diagnostics",
             "Read-only local Android network metadata: active transport, validated connectivity, DNS server count, IPv4/IPv6 route counts, and whether an HTTP proxy is configured. It does not reveal DNS addresses, contact remote hosts, or prove that a VPN has no leaks.",
             OBJ,
@@ -92,12 +102,12 @@ object AiTools {
         ),
         AiTool(
             "test_dns",
-            "Resolves a hostname through one DNS server and reports whether it answered, how fast, " +
-                "and what it returned. Use it to prove a DNS setting works BEFORE writing it into " +
-                "the settings, so a broken resolver is never saved.",
+            "Tests a hostname using the DNS probe modes implemented in this build: udp or doh. " +
+                "Reports whether the resolver answered. TCP and DoT are not implemented by this probe; " +
+                "do not claim they were tested.",
             obj(
                 "server" to str("The resolver: an IP for plain DNS, or a URL for DoH, or a hostname for DoT."),
-                "mode" to str("One of: udp, tcp, dot, doh."),
+                "mode" to str("Supported modes: udp or doh only."),
                 "host" to str("The name to resolve. Default www.google.com."),
                 required = listOf("server", "mode"),
             ),
@@ -227,6 +237,8 @@ object AiTools {
                 "read_logs" -> bridge.logsText(i("lines", 120).coerceIn(20, 500))
                 "core_report" -> bridge.coreReport()
                 "network_diagnostics" -> bridge.networkDiagnostics()
+                "diagnose_connection" -> bridge.diagnoseConnection()
+                "compare_servers" -> bridge.compareServers()
                 "search_public_sources" -> bridge.searchPublicSources(s("query"))
                 "app_map" -> bridge.appMapJson()
                 "list_protocols" -> bridge.protocolsJson()
