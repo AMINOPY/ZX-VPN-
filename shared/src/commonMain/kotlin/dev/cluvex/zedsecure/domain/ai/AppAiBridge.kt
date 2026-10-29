@@ -30,6 +30,8 @@ class AppAiBridge(
     private val coreReportFn: () -> String = { AI_UNSUPPORTED },
     private val networkReportFn: () -> String = { AI_UNSUPPORTED },
     private val searchPublicSourcesFn: suspend (String) -> String = { AI_UNSUPPORTED },
+    private val findWorkingConfigsFn: suspend (String, Int) -> String = { _, _ -> AI_UNSUPPORTED },
+    private val addTestedConfigsFn: suspend (String) -> String = { AI_UNSUPPORTED },
     private val connectFn: suspend () -> String = { AI_UNSUPPORTED },
     private val disconnectFn: suspend () -> String = { AI_UNSUPPORTED },
     private val speedTestFn: suspend () -> String = { AI_UNSUPPORTED },
@@ -122,7 +124,7 @@ class AppAiBridge(
             else "not queried: VPN is not connected"
         return buildJsonObject {
             put("status", runCatching { json.parseToJsonElement(status) }.getOrElse { JsonPrimitive(status) })
-            put("network", networkDiagnostics())
+            put("network", JsonPrimitive(networkDiagnostics()))
             put("relevantLogLines", buildJsonArray { relevantLogs.forEach { add(it) } })
             put("exitInfo", runCatching { json.parseToJsonElement(exit) }.getOrElse { JsonPrimitive(exit) })
             put("limitations", "Read-only evidence, not a packet-level DNS/IP leak test. No settings were changed.")
@@ -165,6 +167,15 @@ class AppAiBridge(
     override suspend fun searchPublicSources(query: String): String =
         if (query.isBlank()) "provide a non-empty search query"
         else runCatching { searchPublicSourcesFn(query.take(160)) }.getOrElse { it.message ?: AI_UNSUPPORTED }
+
+    override suspend fun findWorkingConfigs(query: String, maxResults: Int): String =
+        if (query.isBlank()) "provide a non-empty search query"
+        else runCatching { findWorkingConfigsFn(query.take(160), maxResults.coerceIn(1, 5)) }
+            .getOrElse { it.message ?: AI_UNSUPPORTED }
+
+    override suspend fun addTestedConfigs(candidateIds: String): String =
+        if (candidateIds.isBlank()) "no tested candidate IDs were supplied; nothing was added"
+        else runCatching { addTestedConfigsFn(candidateIds) }.getOrElse { it.message ?: AI_UNSUPPORTED }
 
     override fun appMapJson(): String = APP_MAP
 
