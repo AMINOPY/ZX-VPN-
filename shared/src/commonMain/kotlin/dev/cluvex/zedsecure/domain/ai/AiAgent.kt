@@ -122,7 +122,7 @@ class AiAgent(
                             !AiActionConsent.hasExplicitConsent(
                                 history,
                                 userMessage,
-                                listOf("tested configurations", "tested configs", "کانفیگ‌های آزمایش‌شده", "کانفیگ های تست‌شده", "سرورهای آزمایش‌شده"),
+                                listOf("tested configurations", "tested these configurations", "tested configs", "کانفیگ‌های آزمایش‌شده", "کانفیگ های تست‌شده", "سرورهای آزمایش‌شده"),
                                 listOf("server list", "add", "فهرست سرورها", "اضافه", "افزودن"),
                             )
                         val result = when {
