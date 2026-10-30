@@ -43,10 +43,15 @@ object IranianCdnCatalog {
         "irna.ir", "isna.ir", "president.ir", "dolat.ir", "majlis.ir",
         "ut.ac.ir", "modares.ac.ir", "snapp.ir", "tapsi.ir", "sanjesh.org",
         "idpay.ir", "tums.ac.ir", "alef.ir", "mfa.ir", "moi.ir", "iribnews.ir", "sid.ir", "financialtribune.com",
+        "arvancdn.ir", "autonovin.ir", "daramet.com", "faradars.org", "iau.ir", "irantarh.com",
+        "irantic.com", "melipayamak.com", "milli.gold", "nobat.ir", "sabzlearn.ir", "tarh.ir",
+        "whiteo.ir", "jobinja.ir", "varzesh3.com", "maktabkhooneh.org", "gapgpt.app", "nobitex.ir",
+        "snappfood.ir", "tgju.org", "shecan.ir", "zarinpal.com", "skyroom.online", "tamin.ir",
+        "hostiran.net", "asriran.com", "tabnak.ir", "paziresh24.com", "kanoon.ir", "eghtesadonline.com",
     ).map { IranCdnCandidate("ArvanCloud", it) } + listOf(
         // Other reported Iranian CDN networks
         "cafebazaar.ir", "divar.ir", "basalam.com", "bale.ai", "yektanet.com", "balad.ir", "cdn.ir",
-        "neshan.org", "ramzinex.com", "gamefa.com", "darukade.com", "melligold.com",
+        "neshan.org", "ramzinex.com", "gamefa.com", "darukade.com", "melligold.com", "zoomit.ir", "bama.ir",
         "zoomg.ir", "adivery.com", "mediaad.org", "neshanmap.ir", "virgool.io", "khodro45.com",
     ).map { IranCdnCandidate("Sotoon", it) } + listOf(
         "digikala.com",
