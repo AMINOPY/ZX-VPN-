@@ -36,6 +36,9 @@ data class CdnSniProfile(
     )
 
     fun validate(): List<String> = buildList {
+        if (countryPreset == CountryPreset.IR && inputMode == CandidateInputMode.AUTO) {
+            add("Run AUTO IR scan or enter Iranian IP/SNI candidates manually.")
+        }
         if (inputMode == CandidateInputMode.MANUAL) {
             if (CdnSniCandidates.ips(ips).isEmpty()) add("Add at least one valid IPv4 address or CIDR.")
             if (CdnSniCandidates.hostnames(sni).isEmpty()) add("Add at least one valid SNI hostname.")
