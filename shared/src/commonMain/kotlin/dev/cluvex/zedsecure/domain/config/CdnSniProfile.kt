@@ -52,6 +52,11 @@ data class CdnSniProfile(
         mode = PsiphonConfigBuilder.MODE_CDN,
         cdnIps = CdnSniCandidates.ips(ips).joinToString(","),
         cdnSni = CdnSniCandidates.hostnames(sni).joinToString(","),
+        upstreamSocksMode = if (socksMode == SocksMode.MANUAL) "manual" else "none",
+        upstreamSocksHost = socksHost.trim(),
+        upstreamSocksPort = socksPort.coerceIn(1, 65535),
+        upstreamSocksUsername = socksUsername,
+        upstreamSocksPassword = socksPassword,
     )
 }
 
