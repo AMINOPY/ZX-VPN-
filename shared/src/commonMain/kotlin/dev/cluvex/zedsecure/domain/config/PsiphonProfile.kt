@@ -153,7 +153,10 @@ object PsiphonConfigBuilder {
         if (profile.upstreamSocksMode != "manual") return
         val host = profile.upstreamSocksHost.trim()
         val port = profile.upstreamSocksPort
-        require(host.isNotEmpty() && host.none { it.isWhitespace() || it in "/@?#" }) {
+        val bracketedIpv6 = host.startsWith("[") && host.endsWith("]") && host.count { it == ':' } >= 2
+        require(host.isNotEmpty() && host.none { it.isWhitespace() || it in "/@?#" } &&
+            (!host.contains(':') || bracketedIpv6)
+        ) {
             "Manual SOCKS host is invalid"
         }
         require(port in 1..65535) { "Manual SOCKS port is invalid" }
