@@ -2,6 +2,7 @@ package dev.cluvex.zedsecure.domain.config
 
 import java.net.InetSocketAddress
 import java.net.InetAddress
+import java.net.Inet4Address
 import java.net.Socket
 import javax.net.ssl.SNIHostName
 import javax.net.ssl.SSLSocket
@@ -58,7 +59,7 @@ private fun probeCandidate(
     val host = candidate.hostname.trim().lowercase()
     if (!isSafeHostname(host)) return null
 
-    val addresses = runCatching { InetAddress.getAllByName(host).take(2) }
+    val addresses = runCatching { InetAddress.getAllByName(host).filterIsInstance<Inet4Address>().take(2) }
         .getOrDefault(emptyList())
     if (addresses.isEmpty()) return null
 
