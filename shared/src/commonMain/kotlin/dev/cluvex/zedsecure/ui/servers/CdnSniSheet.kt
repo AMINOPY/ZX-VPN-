@@ -199,8 +199,16 @@ fun CdnSniSheet(
 
             Text("SOCKS upstream", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextButton(onClick = { socksMode = SocksMode.NONE }) { Text("خاموش") }
-                TextButton(onClick = { socksMode = SocksMode.MANUAL }) { Text("دستی") }
+                TextButton(onClick = { socksMode = SocksMode.AUTO; error = "" }) { Text("خودکار") }
+                TextButton(onClick = { socksMode = SocksMode.MANUAL; error = "" }) { Text("دستی") }
+                TextButton(onClick = { socksMode = SocksMode.NONE; error = "" }) { Text("خاموش") }
+            }
+            if (socksMode == SocksMode.AUTO) {
+                Text(
+                    "در حالت خودکار، Psiphon مسیر و انتقال داخلی خود را مدیریت می‌کند؛ SOCKS خارجی وارد نمی‌شود.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
             if (socksMode == SocksMode.MANUAL) {
                 OutlinedTextField(
