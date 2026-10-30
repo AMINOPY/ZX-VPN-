@@ -96,6 +96,7 @@ import dev.cluvex.zedsecure.core.AutoSelect
 import dev.cluvex.zedsecure.domain.config.AutoSelectIds
 import dev.cluvex.zedsecure.domain.config.ConfigParseException
 import dev.cluvex.zedsecure.domain.config.ConfigParser
+import dev.cluvex.zedsecure.domain.config.CdnSniProfile
 import dev.cluvex.zedsecure.domain.config.VpnProfile
 import dev.cluvex.zedsecure.ui.onboarding.TourTargets
 import dev.cluvex.zedsecure.ui.onboarding.tourTarget
@@ -1461,6 +1462,18 @@ fun ServersScreen(
                 )
             }
 
+            target.psiphonSettings()?.cdnSniDedicated == true -> {
+                CdnSniSheet(
+                    initial = CdnSniProfile.fromPsiphon(target.psiphonSettings()!!),
+                    initialName = target.name,
+                    onDismiss = { editTarget = null },
+                    onSave = { name, settings ->
+                        repository.addPsiphon(settings.toPsiphonProfile(), name, id = target.id)
+                        toastRes(Res.string.saved)
+                        editTarget = null
+                    },
+                )
+            }
             target.isPsiphon -> {
                 PsiphonSheet(
                     initial = target.psiphonSettings(),
