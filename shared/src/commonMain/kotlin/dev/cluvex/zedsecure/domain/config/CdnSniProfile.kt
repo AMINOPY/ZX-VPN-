@@ -44,10 +44,17 @@ data class CdnSniProfile(
             add("Xray fallback needs a compatible Xray outbound template; IP and SNI alone are insufficient.")
         }
         if (socksMode == SocksMode.MANUAL) {
-            if (socksHost.isBlank() || socksHost.any { it.isWhitespace() || it in "/@?#" }) {
+            val host = socksHost.trim()
+            val bracketedIpv6 = host.startsWith("[") && host.endsWith("]") && host.count { it == ':' } >= 2
+            if (host.isBlank() || host.any { it.isWhitespace() || it in "/@?#" } ||
+                (host.contains(':') && !bracketedIpv6)
+            ) {
                 add("Manual SOCKS host is invalid.")
             }
             if (socksPort !in 1..65535) add("Manual SOCKS port must be between 1 and 65535.")
+            if (socksPassword.isNotEmpty() && socksUsername.isEmpty()) {
+                add("SOCKS username is required when a password is provided.")
+            }
         }
     }
 
