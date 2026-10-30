@@ -93,7 +93,7 @@ fun CdnSniSheet(
             Text(
                 when (country) {
                     CountryPreset.AUTO -> "انتخاب خودکار منطقه توسط Psiphon"
-                    CountryPreset.IR -> "پروفایل انتخاب‌شده: IR"
+                    CountryPreset.IR -> "حالت محلی IR: خروجی کشور خاصی به Psiphon تحمیل نمی‌شود."
                     CountryPreset.US -> "پروفایل انتخاب‌شده: US"
                 },
                 style = MaterialTheme.typography.bodySmall,
