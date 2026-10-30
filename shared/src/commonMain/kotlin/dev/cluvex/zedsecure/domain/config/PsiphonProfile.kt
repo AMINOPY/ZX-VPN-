@@ -25,6 +25,14 @@ data class PsiphonProfile(
     val cdnIps: String = "",
 
     val cdnSni: String = "",
+
+    // Optional upstream SOCKS5 adapter for the dedicated CDN/SNI profile.
+    // Defaults preserve decoding of profiles saved by older app versions.
+    val upstreamSocksMode: String = "none",
+    val upstreamSocksHost: String = "",
+    val upstreamSocksPort: Int = 1080,
+    val upstreamSocksUsername: String = "",
+    val upstreamSocksPassword: String = "",
 )
 
 object PsiphonConfigBuilder {
@@ -98,6 +106,7 @@ object PsiphonConfigBuilder {
             put("InproxyTunnelProtocolSelectionProbability", 0.0)
 
             putCdnFronting(profile)
+            putManualUpstreamSocks(profile)
 
             when (mode(profile.mode)) {
                 MODE_CDN -> {
@@ -132,6 +141,32 @@ object PsiphonConfigBuilder {
             MODE_CDN -> CDN_PROTOCOLS
             else -> NON_INPROXY_PROTOCOLS
         }.filter { it.contains("QUIC") }
+
+    private fun JsonObjectBuilder.putManualUpstreamSocks(profile: PsiphonProfile) {
+        if (profile.upstreamSocksMode != "manual") return
+        val host = profile.upstreamSocksHost.trim()
+        val port = profile.upstreamSocksPort
+        require(host.isNotEmpty()) { "Manual SOCKS host is empty" }
+        require(port in 1..65535) { "Manual SOCKS port is invalid" }
+        val auth = if (profile.upstreamSocksUsername.isNotEmpty()) {
+            "${encodeUserInfo(profile.upstreamSocksUsername)}:${encodeUserInfo(profile.upstreamSocksPassword)}@"
+        } else ""
+        put("UpstreamProxyURL", "socks5://$auth$host:$port")
+    }
+
+    private fun encodeUserInfo(value: String): String = buildString {
+        value.encodeToByteArray().forEach { byte ->
+            val n = byte.toInt() and 0xFF
+            val safe = (n in 0x41..0x5A) || (n in 0x61..0x7A) ||
+                (n in 0x30..0x39) || n in listOf(0x2D, 0x2E, 0x5F, 0x7E)
+            if (safe) append(n.toChar())
+            else {
+                append('%')
+                append("0123456789ABCDEF"[n shr 4])
+                append("0123456789ABCDEF"[n and 0x0F])
+            }
+        }
+    }
 
     private fun JsonObjectBuilder.putCdnFronting(profile: PsiphonProfile) {
         val addresses = ipCandidates(profile.cdnIps)
