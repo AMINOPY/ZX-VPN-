@@ -61,7 +61,7 @@ class TunnelReadinessTest {
                         } else if (next == 13) 1 else 0
                     }
                     output.write(
-                        "HTTP/1.1 $statusCode Test\\r\\nContent-Length: 0\\r\\nConnection: close\\r\\n\\r\\n"
+                        "HTTP/1.1 $statusCode Test\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
                             .toByteArray(Charsets.US_ASCII),
                     )
                     output.flush()
