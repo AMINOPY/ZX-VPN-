@@ -96,6 +96,7 @@ import dev.cluvex.zedsecure.core.AutoSelect
 import dev.cluvex.zedsecure.domain.config.AutoSelectIds
 import dev.cluvex.zedsecure.domain.config.ConfigParseException
 import dev.cluvex.zedsecure.domain.config.ConfigParser
+import dev.cluvex.zedsecure.domain.config.CdnSniProfile
 import dev.cluvex.zedsecure.domain.config.VpnProfile
 import dev.cluvex.zedsecure.ui.onboarding.TourTargets
 import dev.cluvex.zedsecure.ui.onboarding.tourTarget
@@ -336,6 +337,7 @@ fun ServersScreen(
     var qrTarget by remember { mutableStateOf<Pair<String, String>?>(null) }
     var showCustomJson by remember { mutableStateOf(false) }
     var showPsiphon by remember { mutableStateOf(false) }
+    var showCdnSni by remember { mutableStateOf(false) }
     var showDnsTunnel by remember { mutableStateOf(false) }
     var showMasterDns by remember { mutableStateOf(false) }
     var showOpenConnect by remember { mutableStateOf(false) }
@@ -1176,6 +1178,10 @@ fun ServersScreen(
                 showAddSheet = false
                 showPsiphon = true
             },
+            onCdnSni = {
+                showAddSheet = false
+                showCdnSni = true
+            },
             onDnsTunnel = {
                 showAddSheet = false
                 showDnsTunnel = true
@@ -1326,6 +1332,17 @@ fun ServersScreen(
         )
     }
 
+    if (showCdnSni) {
+        CdnSniSheet(
+            onDismiss = { showCdnSni = false },
+            onSave = { name, settings ->
+                showCdnSni = false
+                repository.addPsiphon(settings.toPsiphonProfile(), name)
+                onServerActivated()
+            },
+        )
+    }
+
     if (showPsiphon) {
         PsiphonSheet(
             onDismiss = { showPsiphon = false },
@@ -1445,6 +1462,18 @@ fun ServersScreen(
                 )
             }
 
+            target.psiphonSettings()?.cdnSniDedicated == true -> {
+                CdnSniSheet(
+                    initial = CdnSniProfile.fromPsiphon(target.psiphonSettings()!!),
+                    initialName = target.name,
+                    onDismiss = { editTarget = null },
+                    onSave = { name, settings ->
+                        repository.addPsiphon(settings.toPsiphonProfile(), name, id = target.id)
+                        toastRes(Res.string.saved)
+                        editTarget = null
+                    },
+                )
+            }
             target.isPsiphon -> {
                 PsiphonSheet(
                     initial = target.psiphonSettings(),
@@ -2070,6 +2099,7 @@ private fun AddServerSheet(
     onManual: () -> Unit,
     onCustom: () -> Unit,
     onPsiphon: () -> Unit,
+    onCdnSni: () -> Unit,
     onDnsTunnel: () -> Unit,
     onMasterDns: () -> Unit,
     onOpenConnect: () -> Unit,
@@ -2123,6 +2153,7 @@ private fun AddServerSheet(
 
             OptionGroup(Res.string.add_group_tunnels)
             Option(Res.drawable.ic_bolt, Res.string.psiphon_add_title, onPsiphon, free = true)
+            Option(Res.drawable.ic_bolt, Res.string.cdn_sni_add_title, onCdnSni, free = true)
             Option(Res.drawable.ic_lock, Res.string.tor_add_title, onTor, free = true)
             Option(Res.drawable.ic_speed, Res.string.ssh_add_title, onSsh)
             if (LocalPlatform.current.supportsSniSpoof) Option(Res.drawable.ic_bolt, Res.string.snispoof_add_title, onSniSpoof)

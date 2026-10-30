@@ -48,7 +48,9 @@ object TunnelReadiness {
                     .toByteArray(),
             )
             out.flush()
-            input.read() >= 0
+            val statusLine = input.bufferedReader(Charsets.US_ASCII).readLine() ?: return@use false
+            val statusCode = statusLine.split(' ').getOrNull(1)?.toIntOrNull() ?: return@use false
+            statusCode in 200..499
         }
     }.getOrElse {
         Log.w(TAG, "readiness probe via 127.0.0.1:$socksPort failed: ${it.message}")

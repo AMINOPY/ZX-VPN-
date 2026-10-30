@@ -759,7 +759,21 @@ class ZedVpnService : VpnService() {
             configJson = configJson,
             onSocksPort = { port -> socksPort.set(port) },
             onEstablished = {
-                if (bridged.compareAndSet(false, true)) bridgeEngine(descriptor, socksPort.get(), tunMtu)
+                if (bridged.compareAndSet(false, true)) {
+                    val psiphonSocksPort = socksPort.get()
+                    if (psiphonSocksPort <= 0) {
+                        Log.e(TAG, "Psiphon reported connected before exposing its local SOCKS port")
+                        onTunnelFailed("Psiphon local SOCKS proxy is not ready")
+                    } else {
+                        bridgeEngine(
+                            descriptor = descriptor,
+                            enginePort = psiphonSocksPort,
+                            tunMtu = tunMtu,
+                            unreachable = R.string.engine_failed_tunnel,
+                            readinessTimeoutMs = 12_000,
+                        )
+                    }
+                }
             },
             onStopped = { reason ->
                 onTunnelFailed(reason)
@@ -775,6 +789,7 @@ class ZedVpnService : VpnService() {
         tunMtu: Int,
         onion: Boolean = false,
         unreachable: Int? = null,
+        readinessTimeoutMs: Int = TunnelReadiness.DNS_TUNNEL_TIMEOUT_MS,
     ) {
         if (enginePort <= 0) {
             VpnManager.onError(getString(R.string.crosschain_inner_failed))
@@ -789,7 +804,13 @@ class ZedVpnService : VpnService() {
             stopEverything(); return
         }
         if (!bridge(descriptor, port, tunMtu, pipeline = true)) return
-        if (unreachable != null && !TunnelReadiness.verify(port)) {
+        if (unreachable != null && !TunnelReadiness.verify(
+                socksPort = port,
+                timeoutMs = readinessTimeoutMs,
+                attempts = 2,
+            )
+        ) {
+            LogBus.append("E/tunnel readiness check failed after the upstream engine connected")
             VpnManager.onError(getString(unreachable))
             stopEverything(); return
         }

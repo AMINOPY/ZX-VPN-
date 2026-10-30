@@ -580,6 +580,7 @@
     <string name="logs_empty">No logs yet.</string>
     <string name="logs_copied">Logs copied</string>
     <string name="psiphon_add_title">Add Psiphon</string>
+    <string name="cdn_sni_add_title">CDN / SNI</string>
     <string name="psiphon_country">Egress country</string>
     <string name="psiphon_country_auto">Auto (fastest)</string>
     <string name="psiphon_country_pick">Choose egress country</string>
