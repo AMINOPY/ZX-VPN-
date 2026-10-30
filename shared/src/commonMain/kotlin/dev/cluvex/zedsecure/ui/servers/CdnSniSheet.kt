@@ -35,6 +35,7 @@ import dev.cluvex.zedsecure.domain.config.CandidateInputMode
 import dev.cluvex.zedsecure.domain.config.CdnSniProfile
 import dev.cluvex.zedsecure.domain.config.CountryPreset
 import dev.cluvex.zedsecure.domain.config.SocksMode
+import dev.cluvex.zedsecure.domain.config.IranianCdnCatalog
 import dev.cluvex.zedsecure.domain.config.scanIranianCdnCandidates
 import kotlinx.coroutines.launch
 
@@ -79,7 +80,7 @@ fun CdnSniSheet(
         ) {
             Text("CDN / SNI", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             Text(
-                "اتصال CDN با Psiphon Fronted-Meek؛ در حالت خودکار از اسکن داخلی Psiphon استفاده می‌شود.",
+                "AUTO IR دامنه‌های ایرانی را از شبکه فعلی گوشی بررسی می‌کند؛ انتخاب بر اساس DNS، TLS/SNI و زمان پاسخ است.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -109,7 +110,7 @@ fun CdnSniSheet(
                         error = ""
                         scope.launch {
                             val attempt = runCatching {
-                                scanIranianCdnCandidates(maxResults = 1, samples = 3, timeoutMs = 3000)
+                                scanIranianCdnCandidates(maxResults = 1, samples = 3, timeoutMs = 2200)
                             }
                             val best = attempt.getOrNull().orEmpty()
                             if (attempt.isFailure) {
@@ -119,7 +120,7 @@ fun CdnSniSheet(
                                 ips = selected.ip
                                 sni = selected.sni
                                 inputMode = CandidateInputMode.MANUAL
-                                scanSummary = selected.provider + " • " + selected.latencyMs + " ms • " +
+                                scanSummary = IranianCdnCatalog.candidates.size + " دامنه بررسی شد؛ " + selected.provider + " • " + selected.latencyMs + " ms • "
                                     selected.successfulSamples + "/" + selected.totalSamples + " تست موفق"
                             } else {
                                 error = "هیچ IP/SNI ایرانی با TLS معتبر از اینترنت فعلی پاسخ نداد. شبکه را عوض کن و دوباره تست بگیر."
@@ -150,6 +151,11 @@ fun CdnSniSheet(
             }
             if (scanSummary.isNotBlank()) {
                 Text("بهترین نتیجه: " + scanSummary, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall)
+                Text(
+                    "این مرحله کیفیت TLS/SNI را می‌سنجد؛ تأیید نهایی فقط با برقراری تونل Psiphon مشخص می‌شود.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall,
+                )
             }
             Text("ورودی IP و SNI", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
