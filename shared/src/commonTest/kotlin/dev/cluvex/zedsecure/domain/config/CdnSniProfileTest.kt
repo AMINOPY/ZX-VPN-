@@ -5,6 +5,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.content
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonPrimitive
 
@@ -71,5 +72,28 @@ class CdnSniProfileTest {
         val protocols = config["LimitTunnelProtocols"]!!.jsonArray.map { it.jsonPrimitive.content }
         assertTrue(protocols.none { it.contains("QUIC") })
     }
+    @Test
+    fun dedicatedProfileRoundTripsPresetAndManualSocksSettings() {
+        val original = CdnSniProfile(
+            countryPreset = CountryPreset.US,
+            inputMode = CandidateInputMode.MANUAL,
+            ips = "1.1.1.1",
+            sni = "cdn.example.com",
+            socksMode = SocksMode.MANUAL,
+            socksHost = "proxy.example.net",
+            socksPort = 1080,
+            socksUsername = "alice",
+            socksPassword = "secret",
+        )
+        val restored = CdnSniProfile.fromPsiphon(original.toPsiphonProfile())
+
+        assertEquals(CountryPreset.US, restored.countryPreset)
+        assertEquals(CandidateInputMode.MANUAL, restored.inputMode)
+        assertEquals(SocksMode.MANUAL, restored.socksMode)
+        assertEquals("proxy.example.net", restored.socksHost)
+        assertEquals("alice", restored.socksUsername)
+        assertEquals("secret", restored.socksPassword)
+    }
+
 
 }
