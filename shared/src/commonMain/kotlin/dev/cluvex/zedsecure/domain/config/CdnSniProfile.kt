@@ -81,8 +81,8 @@ data class CdnSniProfile(
     fun toPsiphonProfile(): PsiphonProfile = PsiphonProfile(
         country = countryPreset.regionCode,
         mode = PsiphonConfigBuilder.MODE_CDN,
-        cdnIps = CdnSniCandidates.ips(ips).joinToString(","),
-        cdnSni = CdnSniCandidates.hostnames(sni).joinToString(","),
+        cdnIps = if (inputMode == CandidateInputMode.MANUAL) CdnSniCandidates.ips(ips).joinToString(",") else "",
+        cdnSni = if (inputMode == CandidateInputMode.MANUAL) CdnSniCandidates.hostnames(sni).joinToString(",") else "",
         upstreamSocksMode = if (socksMode == SocksMode.MANUAL) "manual" else "none",
         upstreamSocksHost = socksHost.trim(),
         upstreamSocksPort = socksPort.coerceIn(1, 65535),
