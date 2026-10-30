@@ -40,6 +40,7 @@ class CdnSniProfileTest {
     fun convertsOnlyValidatedCandidatesToExistingPsiphonProfile() {
         val profile = CdnSniProfile(
             countryPreset = CountryPreset.US,
+            inputMode = CandidateInputMode.MANUAL,
             ips = "1.1.1.1, invalid",
             sni = "cdn.example.com",
         ).toPsiphonProfile()
