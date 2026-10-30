@@ -33,6 +33,8 @@ data class PsiphonProfile(
     val upstreamSocksPort: Int = 1080,
     val upstreamSocksUsername: String = "",
     val upstreamSocksPassword: String = "",
+    val cdnSniDedicated: Boolean = false,
+    val cdnSniPreset: String = "auto",
 )
 
 object PsiphonConfigBuilder {
