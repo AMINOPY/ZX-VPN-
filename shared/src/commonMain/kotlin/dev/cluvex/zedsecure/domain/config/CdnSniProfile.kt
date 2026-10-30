@@ -67,7 +67,7 @@ data class CdnSniProfile(
 @Serializable
 enum class CountryPreset(val regionCode: String) {
     AUTO(""),
-    IR("IR"),
+    IR(""),
     US("US"),
 }
 
