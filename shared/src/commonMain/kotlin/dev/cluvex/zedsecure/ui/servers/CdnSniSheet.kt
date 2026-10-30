@@ -40,9 +40,8 @@ import dev.cluvex.zedsecure.domain.config.scanIranianCdnCandidates
 import kotlinx.coroutines.launch
 
 /**
- * Dedicated, deliberately small CDN/SNI editor. Auto mode leaves candidates
- * empty so Psiphon's built-in CDN scanner is used; manual mode validates the
- * user's IP and SNI candidate lists before saving.
+ * Dedicated CDN/SNI editor. AUTO delegates to Psiphon's built-in scanner;
+ * AUTO IR performs a device-network probe and fills the selected IP/SNI pair.
  */
 @Composable
 fun CdnSniSheet(
@@ -117,14 +116,17 @@ fun CdnSniSheet(
                             }
                             val best = attempt.getOrNull().orEmpty()
                             if (attempt.isFailure) {
-                                error = "اسکن AUTO IR ناموفق بود: " + (attempt.exceptionOrNull()?.message ?: "خطای شبکه")
+                                error = "اسکن AUTO IR ناموفق بود: " +
+                                    (attempt.exceptionOrNull()?.message ?: "خطای شبکه")
                             } else if (best.isNotEmpty()) {
                                 val selected = best.first()
                                 ips = selected.ip
                                 sni = selected.sni
                                 inputMode = CandidateInputMode.MANUAL
-                                scanSummary = IranianCdnCatalog.candidates.size + " دامنه بررسی شد؛ " + selected.provider + " • " + selected.latencyMs + " ms • "
-                                    selected.successfulSamples + "/" + selected.totalSamples + " تست موفق"
+                                scanSummary =
+                                    "${IranianCdnCatalog.candidates.size} دامنه بررسی شد؛ " +
+                                    "${selected.provider} • ${selected.latencyMs} ms • " +
+                                    "${selected.successfulSamples}/${selected.totalSamples} تست موفق"
                             } else {
                                 error = "هیچ IP/SNI ایرانی با TLS معتبر از اینترنت فعلی پاسخ نداد. شبکه را عوض کن و دوباره تست بگیر."
                             }
@@ -134,13 +136,20 @@ fun CdnSniSheet(
                     enabled = !scanningIran,
                     label = { Text(if (scanningIran) "در حال اسکن..." else "AUTO IR") },
                 )
-                AssistChip(onClick = { country = CountryPreset.US }, label = { Text("AUTO US") })
+                AssistChip(onClick = {
+                    country = CountryPreset.US
+                    inputMode = CandidateInputMode.AUTO
+                    ips = ""
+                    sni = ""
+                    scanSummary = ""
+                    error = ""
+                }, label = { Text("AUTO US") })
             }
             Text(
                 when (country) {
                     CountryPreset.AUTO -> "انتخاب خودکار منطقه توسط Psiphon"
                     CountryPreset.IR -> "اسکن CDN/SNI ایرانی روی اینترنت فعلی؛ بهترین جفت IP و SNI انتخاب می‌شود."
-                    CountryPreset.US -> "پروفایل انتخاب‌شده: US"
+                    CountryPreset.US -> "منطقه خروجی Psiphon روی US تنظیم می‌شود؛ IP/SNI را موتور داخلی Psiphon انتخاب می‌کند."
                 },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
