@@ -13,6 +13,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -24,6 +25,7 @@ import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -33,6 +35,8 @@ import dev.cluvex.zedsecure.domain.config.CandidateInputMode
 import dev.cluvex.zedsecure.domain.config.CdnSniProfile
 import dev.cluvex.zedsecure.domain.config.CountryPreset
 import dev.cluvex.zedsecure.domain.config.SocksMode
+import dev.cluvex.zedsecure.domain.config.scanIranianCdnCandidates
+import kotlinx.coroutines.launch
 
 /**
  * Dedicated, deliberately small CDN/SNI editor. Auto mode leaves candidates
@@ -57,6 +61,9 @@ fun CdnSniSheet(
     var socksUsername by remember { mutableStateOf(initial?.socksUsername.orEmpty()) }
     var socksPassword by remember { mutableStateOf(initial?.socksPassword.orEmpty()) }
     var error by remember { mutableStateOf("") }
+    var scanningIran by remember { mutableStateOf(false) }
+    var scanSummary by remember { mutableStateOf("") }
+    val scope = rememberCoroutineScope()
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -86,23 +93,67 @@ fun CdnSniSheet(
 
             Text("انتخاب مسیر", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                AssistChip(onClick = { country = CountryPreset.AUTO }, label = { Text("AUTO") })
-                AssistChip(onClick = { country = CountryPreset.IR }, label = { Text("AUTO IR") })
+                AssistChip(onClick = {
+                    country = CountryPreset.AUTO
+                    inputMode = CandidateInputMode.AUTO
+                    ips = ""
+                    sni = ""
+                    scanSummary = ""
+                    error = ""
+                }, label = { Text("AUTO") })
+                AssistChip(
+                    onClick = {
+                        country = CountryPreset.IR
+                        scanningIran = true
+                        scanSummary = ""
+                        error = ""
+                        scope.launch {
+                            val attempt = runCatching {
+                                scanIranianCdnCandidates(maxResults = 1, samples = 3, timeoutMs = 3000)
+                            }
+                            val best = attempt.getOrNull().orEmpty()
+                            if (attempt.isFailure) {
+                                error = "اسکن AUTO IR ناموفق بود: " + (attempt.exceptionOrNull()?.message ?: "خطای شبکه")
+                            } else if (best.isNotEmpty()) {
+                                val selected = best.first()
+                                ips = selected.ip
+                                sni = selected.sni
+                                inputMode = CandidateInputMode.MANUAL
+                                scanSummary = selected.provider + " • " + selected.latencyMs + " ms • " +
+                                    selected.successfulSamples + "/" + selected.totalSamples + " تست موفق"
+                            } else {
+                                error = "هیچ IP/SNI ایرانی با TLS معتبر از اینترنت فعلی پاسخ نداد. شبکه را عوض کن و دوباره تست بگیر."
+                            }
+                            scanningIran = false
+                        }
+                    },
+                    enabled = !scanningIran,
+                    label = { Text(if (scanningIran) "در حال اسکن..." else "AUTO IR") },
+                )
                 AssistChip(onClick = { country = CountryPreset.US }, label = { Text("AUTO US") })
             }
             Text(
                 when (country) {
                     CountryPreset.AUTO -> "انتخاب خودکار منطقه توسط Psiphon"
-                    CountryPreset.IR -> "حالت محلی IR: خروجی کشور خاصی به Psiphon تحمیل نمی‌شود."
+                    CountryPreset.IR -> "اسکن CDN/SNI ایرانی روی اینترنت فعلی؛ بهترین جفت IP و SNI انتخاب می‌شود."
                     CountryPreset.US -> "پروفایل انتخاب‌شده: US"
                 },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
+            if (scanningIran) {
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    CircularProgressIndicator()
+                    Text("در حال بررسی DNS، TLS/SNI و زمان پاسخ سرویس‌های ایرانی...")
+                }
+            }
+            if (scanSummary.isNotBlank()) {
+                Text("بهترین نتیجه: " + scanSummary, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall)
+            }
             Text("ورودی IP و SNI", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextButton(onClick = { inputMode = CandidateInputMode.AUTO; ips = ""; sni = ""; error = "" }) {
+                TextButton(onClick = { inputMode = CandidateInputMode.AUTO; ips = ""; sni = ""; scanSummary = ""; error = "" }) {
                     Text("AUTO")
                 }
                 TextButton(onClick = { inputMode = CandidateInputMode.MANUAL; error = "" }) {
