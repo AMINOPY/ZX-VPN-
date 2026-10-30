@@ -96,4 +96,18 @@ class CdnSniProfileTest {
     }
 
 
+    @Test
+    fun automaticSocksModeRoundTripsWithoutExternalProxy() {
+        val original = CdnSniProfile(socksMode = SocksMode.AUTO)
+        val psiphon = original.toPsiphonProfile()
+        val restored = CdnSniProfile.fromPsiphon(psiphon)
+        val config = Json.parseToJsonElement(
+            PsiphonConfigBuilder.build(psiphon, "/tmp/psiphon", 1081, 1082),
+        ).jsonObject
+
+        assertEquals("auto", psiphon.upstreamSocksMode)
+        assertEquals(SocksMode.AUTO, restored.socksMode)
+        assertTrue(config["UpstreamProxyURL"] == null)
+    }
+
 }
