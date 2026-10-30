@@ -106,6 +106,9 @@ fun CdnSniSheet(
                     onClick = {
                         country = CountryPreset.IR
                         scanningIran = true
+                        inputMode = CandidateInputMode.AUTO
+                        ips = ""
+                        sni = ""
                         scanSummary = ""
                         error = ""
                         scope.launch {
