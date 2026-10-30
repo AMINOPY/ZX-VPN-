@@ -8,7 +8,7 @@ class IranCdnAutoSelectorTest {
     @Test
     fun catalogContainsOnlyUniquePublicHostnames() {
         val candidates = IranianCdnCatalog.candidates
-        assertTrue(candidates.size >= 20)
+        assertTrue(candidates.size >= 70)
         assertEquals(
             candidates.size,
             candidates.map { it.provider to it.hostname }.distinct().size,
