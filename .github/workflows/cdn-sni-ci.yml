@@ -48,3 +48,11 @@ jobs:
         run: ./gradlew --no-daemon :app:assembleDebug
       - name: Compile shared code and run tests
         run: ./gradlew --no-daemon :shared:desktopTest
+      - name: Upload Android debug APK
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zx-vpn-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 7
