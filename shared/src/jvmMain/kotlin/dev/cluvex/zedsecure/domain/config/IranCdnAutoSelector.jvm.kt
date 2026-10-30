@@ -101,7 +101,6 @@ private fun probeTlsHttp(
             val parameters = socket.sslParameters
             parameters.serverNames = listOf(SNIHostName(sni))
             parameters.endpointIdentificationAlgorithm = "HTTPS"
-            parameters.applicationProtocols = arrayOf("http/1.1")
             socket.sslParameters = parameters
             socket.soTimeout = timeoutMs
             socket.startHandshake()
