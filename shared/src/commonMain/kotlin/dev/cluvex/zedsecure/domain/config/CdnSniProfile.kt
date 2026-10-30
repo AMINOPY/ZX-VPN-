@@ -51,6 +51,26 @@ data class CdnSniProfile(
         }
     }
 
+    companion object {
+        fun fromPsiphon(profile: PsiphonProfile): CdnSniProfile = CdnSniProfile(
+            countryPreset = when (profile.cdnSniPreset.lowercase()) {
+                "ir" -> CountryPreset.IR
+                "us" -> CountryPreset.US
+                else -> CountryPreset.AUTO
+            },
+            inputMode = if (profile.cdnIps.isBlank() && profile.cdnSni.isBlank()) {
+                CandidateInputMode.AUTO
+            } else CandidateInputMode.MANUAL,
+            ips = profile.cdnIps,
+            sni = profile.cdnSni,
+            socksMode = if (profile.upstreamSocksMode == "manual") SocksMode.MANUAL else SocksMode.NONE,
+            socksHost = profile.upstreamSocksHost,
+            socksPort = profile.upstreamSocksPort,
+            socksUsername = profile.upstreamSocksUsername,
+            socksPassword = profile.upstreamSocksPassword,
+        )
+    }
+
     fun toPsiphonProfile(): PsiphonProfile = PsiphonProfile(
         country = countryPreset.regionCode,
         mode = PsiphonConfigBuilder.MODE_CDN,
@@ -61,6 +81,8 @@ data class CdnSniProfile(
         upstreamSocksPort = socksPort.coerceIn(1, 65535),
         upstreamSocksUsername = socksUsername,
         upstreamSocksPassword = socksPassword,
+        cdnSniDedicated = true,
+        cdnSniPreset = countryPreset.name.lowercase(),
     )
 }
 
