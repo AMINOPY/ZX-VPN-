@@ -110,7 +110,12 @@ object PsiphonConfigBuilder {
 
             when (mode(profile.mode)) {
                 MODE_CDN -> {
-                    putJsonArray("LimitTunnelProtocols") { CDN_PROTOCOLS.forEach { add(it) } }
+                    putJsonArray("LimitTunnelProtocols") {
+                        val protocols = if (profile.upstreamSocksMode == "manual") {
+                            CDN_PROTOCOLS.filterNot { it.contains("QUIC") }
+                        } else CDN_PROTOCOLS
+                        protocols.forEach { add(it) }
+                    }
                     put("DisableTactics", true)
                 }
                 MODE_DIRECT -> {
@@ -146,7 +151,9 @@ object PsiphonConfigBuilder {
         if (profile.upstreamSocksMode != "manual") return
         val host = profile.upstreamSocksHost.trim()
         val port = profile.upstreamSocksPort
-        require(host.isNotEmpty()) { "Manual SOCKS host is empty" }
+        require(host.isNotEmpty() && host.none { it.isWhitespace() || it in "/@?#" }) {
+            "Manual SOCKS host is invalid"
+        }
         require(port in 1..65535) { "Manual SOCKS port is invalid" }
         val auth = if (profile.upstreamSocksUsername.isNotEmpty()) {
             "${encodeUserInfo(profile.upstreamSocksUsername)}:${encodeUserInfo(profile.upstreamSocksPassword)}@"
