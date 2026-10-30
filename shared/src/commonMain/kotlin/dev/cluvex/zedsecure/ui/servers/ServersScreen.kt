@@ -336,6 +336,7 @@ fun ServersScreen(
     var qrTarget by remember { mutableStateOf<Pair<String, String>?>(null) }
     var showCustomJson by remember { mutableStateOf(false) }
     var showPsiphon by remember { mutableStateOf(false) }
+    var showCdnSni by remember { mutableStateOf(false) }
     var showDnsTunnel by remember { mutableStateOf(false) }
     var showMasterDns by remember { mutableStateOf(false) }
     var showOpenConnect by remember { mutableStateOf(false) }
@@ -1176,6 +1177,10 @@ fun ServersScreen(
                 showAddSheet = false
                 showPsiphon = true
             },
+            onCdnSni = {
+                showAddSheet = false
+                showCdnSni = true
+            },
             onDnsTunnel = {
                 showAddSheet = false
                 showDnsTunnel = true
@@ -1321,6 +1326,17 @@ fun ServersScreen(
             onSave = { name, innerId, outerId ->
                 showCrossChain = false
                 repository.addCrossChain(innerId = innerId, outerId = outerId, name = name)
+                onServerActivated()
+            },
+        )
+    }
+
+    if (showCdnSni) {
+        CdnSniSheet(
+            onDismiss = { showCdnSni = false },
+            onSave = { name, settings ->
+                showCdnSni = false
+                repository.addPsiphon(settings.toPsiphonProfile(), name)
                 onServerActivated()
             },
         )
@@ -2070,6 +2086,7 @@ private fun AddServerSheet(
     onManual: () -> Unit,
     onCustom: () -> Unit,
     onPsiphon: () -> Unit,
+    onCdnSni: () -> Unit,
     onDnsTunnel: () -> Unit,
     onMasterDns: () -> Unit,
     onOpenConnect: () -> Unit,
@@ -2123,6 +2140,7 @@ private fun AddServerSheet(
 
             OptionGroup(Res.string.add_group_tunnels)
             Option(Res.drawable.ic_bolt, Res.string.psiphon_add_title, onPsiphon, free = true)
+            Option(Res.drawable.ic_bolt, Res.string.cdn_sni_add_title, onCdnSni, free = true)
             Option(Res.drawable.ic_lock, Res.string.tor_add_title, onTor, free = true)
             Option(Res.drawable.ic_speed, Res.string.ssh_add_title, onSsh)
             if (LocalPlatform.current.supportsSniSpoof) Option(Res.drawable.ic_bolt, Res.string.snispoof_add_title, onSniSpoof)
