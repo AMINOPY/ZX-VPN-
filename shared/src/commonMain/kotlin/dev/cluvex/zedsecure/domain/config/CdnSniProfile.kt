@@ -16,7 +16,7 @@ data class CdnSniProfile(
     val ips: String = "",
     val sni: String = "",
     val primaryEngine: PrimaryEngine = PrimaryEngine.PSIPHON,
-    val fallbackEnabled: Boolean = true,
+    val fallbackEnabled: Boolean = false,
     val fallbackXrayJson: String = "",
     val socksMode: SocksMode = SocksMode.NONE,
     val socksHost: String = "",
@@ -36,13 +36,17 @@ data class CdnSniProfile(
     )
 
     fun validate(): List<String> = buildList {
-        if (CdnSniCandidates.ips(ips).isEmpty()) add("Add at least one valid IPv4 address or CIDR.")
-        if (CdnSniCandidates.hostnames(sni).isEmpty()) add("Add at least one valid SNI hostname.")
+        if (inputMode == CandidateInputMode.MANUAL) {
+            if (CdnSniCandidates.ips(ips).isEmpty()) add("Add at least one valid IPv4 address or CIDR.")
+            if (CdnSniCandidates.hostnames(sni).isEmpty()) add("Add at least one valid SNI hostname.")
+        }
         if (fallbackEnabled && fallbackXrayJson.isBlank()) {
             add("Xray fallback needs a compatible Xray outbound template; IP and SNI alone are insufficient.")
         }
         if (socksMode == SocksMode.MANUAL) {
-            if (socksHost.isBlank()) add("Manual SOCKS host is required.")
+            if (socksHost.isBlank() || socksHost.any { it.isWhitespace() || it in "/@?#" }) {
+                add("Manual SOCKS host is invalid.")
+            }
             if (socksPort !in 1..65535) add("Manual SOCKS port must be between 1 and 65535.")
         }
     }
