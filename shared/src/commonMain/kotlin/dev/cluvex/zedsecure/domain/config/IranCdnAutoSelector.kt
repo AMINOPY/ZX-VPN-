@@ -42,10 +42,10 @@ object IranianCdnCatalog {
         // ArvanCloud-backed public sites
         "irna.ir", "isna.ir", "president.ir", "dolat.ir", "majlis.ir",
         "ut.ac.ir", "modares.ac.ir", "snapp.ir", "tapsi.ir", "sanjesh.org",
-        "idpay.ir", "tums.ac.ir", "alef.ir",
+        "idpay.ir", "tums.ac.ir", "alef.ir", "mfa.ir", "moi.ir", "iribnews.ir", "sid.ir", "financialtribune.com",
     ).map { IranCdnCandidate("ArvanCloud", it) } + listOf(
         // Other reported Iranian CDN networks
-        "cafebazaar.ir", "divar.ir", "basalam.com",
+        "cafebazaar.ir", "divar.ir", "basalam.com", "bale.ai", "yektanet.com", "balad.ir", "cdn.ir",\n        "neshan.org", "ramzinex.com", "gamefa.com", "darukade.com", "melligold.com",\n        "zoomg.ir", "adivery.com", "mediaad.org", "neshanmap.ir", "virgool.io", "khodro45.com",
     ).map { IranCdnCandidate("Sotoon", it) } + listOf(
         "digikala.com",
     ).map { IranCdnCandidate("DigiCDN", it) } + listOf(
