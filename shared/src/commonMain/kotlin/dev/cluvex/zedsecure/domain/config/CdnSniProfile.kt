@@ -73,7 +73,11 @@ data class CdnSniProfile(
             } else CandidateInputMode.MANUAL,
             ips = profile.cdnIps,
             sni = profile.cdnSni,
-            socksMode = when (profile.upstreamSocksMode.lowercase()) {\n                "manual" -> SocksMode.MANUAL\n                "auto" -> SocksMode.AUTO\n                else -> SocksMode.NONE\n            },
+            socksMode = when (profile.upstreamSocksMode.lowercase()) {
+                "manual" -> SocksMode.MANUAL
+                "auto" -> SocksMode.AUTO
+                else -> SocksMode.NONE
+            },
             socksHost = profile.upstreamSocksHost,
             socksPort = profile.upstreamSocksPort,
             socksUsername = profile.upstreamSocksUsername,
@@ -86,7 +90,11 @@ data class CdnSniProfile(
         mode = PsiphonConfigBuilder.MODE_CDN,
         cdnIps = if (inputMode == CandidateInputMode.MANUAL) CdnSniCandidates.ips(ips).joinToString(",") else "",
         cdnSni = if (inputMode == CandidateInputMode.MANUAL) CdnSniCandidates.hostnames(sni).joinToString(",") else "",
-        upstreamSocksMode = when (socksMode) {\n            SocksMode.AUTO -> "auto"\n            SocksMode.MANUAL -> "manual"\n            SocksMode.NONE -> "none"\n        },
+        upstreamSocksMode = when (socksMode) {
+            SocksMode.AUTO -> "auto"
+            SocksMode.MANUAL -> "manual"
+            SocksMode.NONE -> "none"
+        },
         upstreamSocksHost = socksHost.trim(),
         upstreamSocksPort = socksPort.coerceIn(1, 65535),
         upstreamSocksUsername = socksUsername,
