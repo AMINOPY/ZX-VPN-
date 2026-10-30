@@ -3,6 +3,10 @@ package dev.cluvex.zedsecure.domain.config
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonPrimitive
 
 class CdnSniProfileTest {
     @Test
@@ -44,4 +48,28 @@ class CdnSniProfileTest {
         assertEquals("1.1.1.1", profile.cdnIps)
         assertEquals("cdn.example.com", profile.cdnSni)
     }
+    @Test
+    fun manualSocksIsAddedAsPsiphonUpstreamAndDisablesQuic() {
+        val profile = PsiphonProfile(
+            mode = PsiphonConfigBuilder.MODE_CDN,
+            cdnIps = "1.1.1.1",
+            cdnSni = "cdn.example.com",
+            upstreamSocksMode = "manual",
+            upstreamSocksHost = "127.0.0.1",
+            upstreamSocksPort = 1080,
+            upstreamSocksUsername = "user@name",
+            upstreamSocksPassword = "p:ss",
+        )
+        val config = Json.parseToJsonElement(
+            PsiphonConfigBuilder.build(profile, "/tmp/psiphon", 1081, 1082),
+        ).jsonObject
+
+        assertEquals(
+            "socks5://user%40name:p%3Ass@127.0.0.1:1080",
+            config["UpstreamProxyURL"]?.jsonPrimitive?.content,
+        )
+        val protocols = config["LimitTunnelProtocols"]!!.jsonArray.map { it.jsonPrimitive.content }
+        assertTrue(protocols.none { it.contains("QUIC") })
+    }
+
 }
