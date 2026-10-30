@@ -48,6 +48,8 @@ jobs:
         run: ./gradlew --no-daemon :app:assembleDebug
       - name: Compile shared code and run tests
         run: ./gradlew --no-daemon :shared:desktopTest
+      - name: Run Android unit tests
+        run: ./gradlew --no-daemon :app:testDebugUnitTest
       - name: Upload Android debug APK
         if: success()
         uses: actions/upload-artifact@v4
